@@ -22,6 +22,7 @@ const emptyForm: LivroPayload = {
   dataLancamento: "",
   editora: "",
   statusAluguel: "DISPONIVEL",
+  quantidadeTotal: 1,
 }
 
 export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
@@ -79,6 +80,7 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
       dataLancamento: livro.dataLancamento.split("T")[0],
       editora: livro.editora,
       statusAluguel: livro.statusAluguel,
+      quantidadeTotal: livro.quantidadeTotal,
     })
     setFormOpen(true)
     setError("")
@@ -152,7 +154,7 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
             </Button>
           </div>
 
-          <div className="flex-1 overflow-auto rounded-xl border border-border">
+          <div className="no-scrollbar flex-1 overflow-auto rounded-xl border border-border">
             {loading ? (
               <div className="flex items-center justify-center py-20 text-muted-foreground">
                 <Loader2 className="size-6 animate-spin" />
@@ -273,6 +275,29 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label
+                  htmlFor="quantidadeTotal"
+                  className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+                >
+                  Exemplares
+                </label>
+                <input
+                  id="quantidadeTotal"
+                  type="number"
+                  required
+                  min={1}
+                  step={1}
+                  value={formData.quantidadeTotal ?? 1}
+                  onChange={(e) =>
+                    setFormData((p) => ({ ...p, quantidadeTotal: e.target.valueAsNumber }))
+                  }
+                  className="h-10 w-full rounded-xl border border-border bg-secondary/60 px-4 text-sm outline-none transition-colors focus:border-gold/50 focus:ring-2 focus:ring-gold/20"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Quantos exemplares deste título a biblioteca possui.
+                </p>
+              </div>
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Data de lançamento

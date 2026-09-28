@@ -1,4 +1,5 @@
 import instanciaPrisma from "../../connection/instance.js";
+import { encerrarVencidos } from "./aluguelRepository.js";
 
 const prisma = instanciaPrisma.getConnection();
 
@@ -16,6 +17,14 @@ class BookRepository {
             throw new Error('Repository: Já existe um livro com este título e autor cadastrado!');
         }
 
+        // O admin define quantos exemplares existem. Sem isto a contagem de
+        // disponiveis nao faria sentido, porque o total viria sempre do seed.
+        const quantidadeTotal = Number.parseInt(data.quantidadeTotal, 10);
+
+        if (!Number.isInteger(quantidadeTotal) || quantidadeTotal < 1) {
+            throw new Error('Repository: A quantidade de exemplares deve ser no mínimo 1!');
+        }
+
         const livro = await prisma.livro.create({
             data: {
                 titulo: data.titulo,
@@ -23,6 +32,7 @@ class BookRepository {
                 dataLancamento: new Date(data.dataLancamento),
                 editora: data.editora,
                 statusAluguel: data.statusAluguel ?? 'DISPONIVEL',
+                quantidadeTotal,
                 quantidadeAlugada: data.quantidadeAlugada ?? 0,
             }
         });
@@ -31,6 +41,10 @@ class BookRepository {
     }
 
     async showAllBooks() {
+        // Antes de listar, encerra o que venceu. Sem isso a contagem de
+        // exemplares disponiveis ficaria defasada para quem nao aluga ha dias.
+        await encerrarVencidos(prisma);
+
         const livros = await prisma.livro.findMany({
             orderBy: { createdAt: 'desc' }
         });
@@ -63,6 +77,27 @@ class BookRepository {
             Object.entries(data).filter(([_, value]) => value !== "" && value !== null && value !== undefined)
         );
 
+        if (cleanData.quantidadeTotal !== undefined) {
+            const total = Number.parseInt(cleanData.quantidadeTotal, 10);
+
+            // Reduzir o total abaixo do que ja esta alugado deixaria o estoque
+            // negativo, com mais copias emprestadas do que existem.
+            if (!Number.isInteger(total) || total < 1) {
+                throw new Error('Repository: A quantidade de exemplares deve ser no mínimo 1!');
+            }
+
+            if (total < livroExists.quantidadeAlugada) {
+                throw new Error('Repository: Não é possível ter menos exemplares do que já estão alugados!');
+            }
+
+            cleanData.quantidadeTotal = total;
+
+            // O status precisa acompanhar o novo total, ou o livro ficaria
+            // marcado como DISPONIVEL sem nenhum exemplar sobrando.
+            cleanData.statusAluguel =
+                livroExists.quantidadeAlugada >= total ? 'ALUGADO' : 'DISPONIVEL';
+        }
+
         // Converte a data caso venha no body
         if (cleanData.dataLancamento) {
             cleanData.dataLancamento = new Date(cleanData.dataLancamento);
@@ -88,6 +123,7 @@ class BookRepository {
         await prisma.livro.delete({ where: { id: Number(id) } });
         return { message: 'Livro deletado com sucesso!' };
     }
+
 }
 
 export default BookRepository;

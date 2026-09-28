@@ -8,10 +8,13 @@
   "main": "./src/server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon src/server.js"
+    "start": "nodemon src/server.js",
+    "seed:users": "node ./src/app/seeds/userSeed.js",
+    "seed:books": "node ./src/app/seeds/bookSeed.js",
+    "seed": "node ./src/app/seeds/userSeed.js && node ./src/app/seeds/bookSeed.js"
   },
   "prisma": {
-    "seed": "node ./src/app/seeds/bookSeed.js"
+    "seed": "node ./src/app/seeds/userSeed.js && node ./src/app/seeds/bookSeed.js"
   },
   "dependencies": {
     "@faker-js/faker": "^9.9.0",
@@ -22,8 +25,5 @@
     "nodemon": "^3.1.10",
     "pg": "^8.16.3",
     "prisma": "^6.19.0"
-  },
-  "devDependencies": {
-    "dotenv": "^17.2.3"
   }
 }

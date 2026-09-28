@@ -175,6 +175,16 @@
       transform: translateX(100%);
     }
   }
+
+  /* Esconde a barra de rolagem sem tirar a capacidade de rolar.
+     Firefox usa scrollbar-width; WebKit/Blink precisam do pseudo-elemento. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .theme-transition,

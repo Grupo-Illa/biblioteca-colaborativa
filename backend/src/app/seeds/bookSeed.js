@@ -11,9 +11,20 @@ const editoras = [
 const statusOpcoes = ['DISPONIVEL', 'ALUGADO'];
 
 async function createRandomBooks() {
+    const total = await prisma.livro.count();
+
+    if (total > 0) {
+        console.log(`Ja existem ${total} livros no banco. Seed ignorado.`);
+        return;
+    }
+
     const seeds = [];
 
     for (let i = 1; i <= 20; i++) {
+        // Sem um total de copias nao dava para calcular o que esta disponivel.
+        const quantidadeTotal = faker.number.int({ min: 1, max: 8 });
+        const quantidadeAlugada = faker.number.int({ min: 0, max: quantidadeTotal });
+
         seeds.push(
             prisma.livro.create({
                 data: {
@@ -21,8 +32,10 @@ async function createRandomBooks() {
                     autor: faker.person.fullName(),
                     dataLancamento: faker.date.between({ from: '1950-01-01', to: '2024-12-31' }),
                     editora: editoras[Math.floor(Math.random() * editoras.length)],
-                    statusAluguel: statusOpcoes[Math.floor(Math.random() * statusOpcoes.length)],
-                    quantidadeAlugada: faker.number.int({ min: 0, max: 150 }),
+                    // Esgota o estoque quando todas as copias foram alugadas.
+                    statusAluguel: quantidadeAlugada >= quantidadeTotal ? 'ALUGADO' : 'DISPONIVEL',
+                    quantidadeTotal,
+                    quantidadeAlugada,
                 }
             })
         );

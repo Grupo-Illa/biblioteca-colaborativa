@@ -1,12 +1,13 @@
 "use client"
 
+import { BookOpen, Heart, Library, LogIn, Search, User } from "lucide-react"
 import { useEffect, useState } from "react"
-import { BookOpen, Heart, Search, LogIn, User, Library } from "lucide-react"
+import { AdminBookModal } from "@/components/library/admin-book-modal"
+import { MeusAlugueis } from "@/components/library/meus-alugueis"
 import { ThemeToggle } from "@/components/library/theme-toggle"
 import { Input } from "@/components/ui/input"
+import type { Emprestimo, User as UserType } from "@/lib/api"
 import { cn } from "@/lib/utils"
-import type { User as UserType } from "@/lib/api"
-import { AdminBookModal } from "@/components/library/admin-book-modal"
 
 type HeaderProps = {
   query: string
@@ -14,6 +15,10 @@ type HeaderProps = {
   favoritesCount: number
   showFavoritesOnly: boolean
   onToggleFavorites: () => void
+  alugueis: Emprestimo[]
+  carregandoAlugueis: boolean
+  devolvendoId: number | null
+  onDevolver: (emprestimoId: number) => void
 }
 
 export function Header({
@@ -22,6 +27,10 @@ export function Header({
   favoritesCount,
   showFavoritesOnly,
   onToggleFavorites,
+  alugueis,
+  carregandoAlugueis,
+  devolvendoId,
+  onDevolver,
 }: HeaderProps) {
   const [currentUser, setCurrentUser] = useState<UserType | null>(null)
   const [adminModalOpen, setAdminModalOpen] = useState(false)
@@ -86,6 +95,16 @@ export function Header({
               </span>
             )}
           </button>
+          {/* Fica junto dos demais controles do topo, visivel so para quem
+              esta logado, porque lista algueis e pessoal. */}
+          {currentUser && (
+            <MeusAlugueis
+              alugueis={alugueis}
+              carregando={carregandoAlugueis}
+              devolvendoId={devolvendoId}
+              onDevolver={onDevolver}
+            />
+          )}
 
           {currentUser ? (
             <div className="group relative">

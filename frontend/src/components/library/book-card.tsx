@@ -10,6 +10,10 @@ type BookCardProps = {
   isFavorite: boolean;
   onToggleFavorite: (id: string) => void;
   onOpen: (book: Book) => void;
+  onRent: (book: Book) => void;
+  renting?: boolean;
+  /** Este usuario ja tem um exemplar deste titulo alugado. */
+  jaAlugou?: boolean;
   index: number;
 };
 
@@ -18,8 +22,13 @@ export function BookCard({
   isFavorite,
   onToggleFavorite,
   onOpen,
+  onRent,
+  renting = false,
+  jaAlugou = false,
   index,
 }: BookCardProps) {
+  // Bloqueado quando nao ha exemplar ou quando o proprio usuario ja tem um.
+  const bloqueado = !book.available || jaAlugou;
   return (
     <article
       onClick={() => onOpen(book)}
@@ -94,15 +103,26 @@ export function BookCard({
 
         <button
           type="button"
-          disabled={!book.available}
+          disabled={bloqueado || renting}
+          onClick={(e) => {
+            // O card inteiro abre o detalhe; o botao precisa parar a propagacao.
+            e.stopPropagation();
+            onRent(book);
+          }}
           className={cn(
             "h-9 rounded-lg text-sm font-medium transition-all",
-            book.available
+            !bloqueado && !renting
               ? "bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98]"
               : "cursor-not-allowed bg-secondary text-muted-foreground",
           )}
         >
-          {book.available ? `Alugar · ${book.copies} disp.` : "Entrar na fila"}
+          {renting
+            ? "Alugando..."
+            : jaAlugou
+              ? "Você já alugou"
+              : book.available
+                ? `Alugar · ${book.copies} disp.`
+                : "Indisponível"}
         </button>
       </div>
     </article>

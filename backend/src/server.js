@@ -1,16 +1,15 @@
 import express from 'express';
-import dotenv from 'dotenv';
 import cors from 'cors';
 import bookRoutes from './app/routes/bookRoutes.js';
 import userRoutes from './app/routes/userRoutes.js';
-
-dotenv.config();
+import aluguelRoutes from './app/routes/aluguelRoutes.js';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use('/livros', bookRoutes);
 app.use('/usuarios', userRoutes);
+app.use('/alugueis', aluguelRoutes);
 
 const DOOR = process.env.DOOR || 3000;
 

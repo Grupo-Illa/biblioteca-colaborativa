@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 
 class instanciaPrisma {
-    static Prisma = new PrismaClient
+    static Prisma = null
 
     static getConnection() {
         if (!this.Prisma) {

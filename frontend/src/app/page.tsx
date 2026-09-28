@@ -1,7 +1,7 @@
 "use client";
 
 import { BookX } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { BookCard } from "@/components/library/book-card";
 import { BookDetailDialog } from "@/components/library/book-detail-dialog";
 import {
@@ -9,7 +9,20 @@ import {
   type SortOption,
 } from "@/components/library/filter-panel";
 import { Header } from "@/components/library/header";
-import { type Book, getBooks } from "@/lib/api";
+import {
+  type Book,
+  type Emprestimo,
+  devolverAluguel,
+  getBooks,
+  getMeusAlugueis,
+  rentBook as rentBookApi,
+} from "@/lib/api";
+import {
+  gravarFavoritos,
+  lerFavoritos,
+  usuarioAtualEmail,
+} from "@/lib/favorites";
+import { cn } from "@/lib/utils";
 
 export default function Page() {
   const [books, setBooks] = useState<Book[]>([]);
@@ -23,6 +36,24 @@ export default function Page() {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [rentingId, setRentingId] = useState<string | null>(null);
+  const [alugueis, setAlugueis] = useState<Emprestimo[]>([]);
+  const [carregandoAlugueis, setCarregandoAlugueis] = useState(false);
+  const [devolvendoId, setDevolvendoId] = useState<number | null>(null);
+  const [message, setMessage] = useState<{
+    tipo: "sucesso" | "erro";
+    texto: string;
+  } | null>(null);
+
+  // Carrega os favoritos do usuario logado ao abrir a pagina.
+  useEffect(() => {
+    setFavorites(lerFavoritos(usuarioAtualEmail()));
+  }, []);
+
+  // Persiste a cada mudanca, inclusive quando o usuario troca de conta.
+  useEffect(() => {
+    gravarFavoritos(usuarioAtualEmail(), favorites);
+  }, [favorites]);
 
   useEffect(() => {
     getBooks().then((data) => {
@@ -39,6 +70,91 @@ export default function Page() {
   const openBook = (book: Book) => {
     setSelectedBook(book);
     setDetailOpen(true);
+  };
+
+  // Recarrega a lista para refletir a nova quantidade disponivel.
+  const refreshBooks = useCallback(async () => {
+    const data = await getBooks();
+    setBooks(data);
+  }, []);
+
+  // Só há aluguel para quem está logado. Sem token a API responde 401 e o
+  // catch do getMeusAlugueis devolve lista vazia, então não há erro visível.
+  const refreshAlugueis = useCallback(async () => {
+    if (!usuarioAtualEmail()) {
+      setAlugueis([]);
+      return;
+    }
+    setCarregandoAlugueis(true);
+    const data = await getMeusAlugueis();
+    setAlugueis(data);
+    setCarregandoAlugueis(false);
+  }, []);
+
+  useEffect(() => {
+    refreshAlugueis();
+  }, [refreshAlugueis]);
+
+  // Livros que este usuario ja tem alugados e nao devolveu. O card usa isso
+  // para nao oferecer de novo um exemplar que ele ja esta com o emprestado.
+  const livrosAlugados = useMemo(
+    () =>
+      new Set(
+        alugueis
+          .filter((a) => a.status === "ATIVO")
+          .map((a) => String(a.livroId)),
+      ),
+    [alugueis],
+  );
+
+  const rentBook = async (book: Book) => {
+    setRentingId(book.id);
+    try {
+      const result = await rentBookApi(Number(book.id));
+
+      // precisa recarregar os dois lados: o estoque do livro e a lista do topo
+      await Promise.all([refreshBooks(), refreshAlugueis()]);
+
+      if (result.error) {
+        setMessage({ tipo: "erro", texto: result.message });
+        return;
+      }
+
+      const prazo = result.data?.prazoDevolucao
+        ? new Date(result.data.prazoDevolucao).toLocaleDateString("pt-BR")
+        : null;
+
+      setMessage({
+        tipo: "sucesso",
+        texto: `"${book.title}" alugado. Restam ${result.disponiveis} cópia(s).${
+          prazo ? ` Devolva até ${prazo}.` : ""
+        }`,
+      });
+
+      setSelectedBook(null);
+      setDetailOpen(false);
+    } finally {
+      setRentingId(null);
+    }
+  };
+
+  const devolver = async (emprestimoId: number) => {
+    setDevolvendoId(emprestimoId);
+    try {
+      const result = await devolverAluguel(emprestimoId);
+
+      // o estoque volta a crescer, entao os dois lados mudam de novo
+      await Promise.all([refreshBooks(), refreshAlugueis()]);
+
+      setMessage({
+        tipo: result.error ? "erro" : "sucesso",
+        texto: result.error
+          ? result.message
+          : `${result.message} Exemplar disponível novamente.`,
+      });
+    } finally {
+      setDevolvendoId(null);
+    }
   };
 
   const toggleCategory = (category: string) =>
@@ -118,9 +234,33 @@ export default function Page() {
         favoritesCount={favorites.length}
         showFavoritesOnly={showFavoritesOnly}
         onToggleFavorites={() => setShowFavoritesOnly((v) => !v)}
+        alugueis={alugueis}
+        carregandoAlugueis={carregandoAlugueis}
+        devolvendoId={devolvendoId}
+        onDevolver={devolver}
       />
 
       <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        {message && (
+          <div
+            role="status"
+            className={cn(
+              "mb-6 flex items-center justify-between gap-4 rounded-xl border px-4 py-3 text-sm",
+              message.tipo === "sucesso"
+                ? "border-gold/40 bg-gold/10 text-foreground"
+                : "border-destructive/40 bg-destructive/10 text-foreground",
+            )}
+          >
+            <span>{message.texto}</span>
+            <button
+              type="button"
+              onClick={() => setMessage(null)}
+              className="shrink-0 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Fechar
+            </button>
+          </div>
+        )}
         {/* Hero */}
         <section className="mb-10 max-w-2xl">
           <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
@@ -164,6 +304,9 @@ export default function Page() {
                     isFavorite={favorites.includes(book.id)}
                     onToggleFavorite={toggleFavorite}
                     onOpen={openBook}
+                    onRent={rentBook}
+                    renting={rentingId === book.id}
+                    jaAlugou={livrosAlugados.has(book.id)}
                   />
                 ))}
               </div>
@@ -195,6 +338,9 @@ export default function Page() {
         onOpenChange={setDetailOpen}
         isFavorite={selectedBook ? favorites.includes(selectedBook.id) : false}
         onToggleFavorite={toggleFavorite}
+        onRent={rentBook}
+        renting={rentingId === selectedBook?.id}
+        jaAlugou={selectedBook ? livrosAlugados.has(selectedBook.id) : false}
       />
     </div>
   );

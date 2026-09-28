@@ -16,6 +16,10 @@ type BookDetailDialogProps = {
   book: Book | null;
   isFavorite: boolean;
   onToggleFavorite: (id: string) => void;
+  onRent: (book: Book) => void;
+  renting: boolean;
+  /** Este usuario ja tem um exemplar deste titulo alugado. */
+  jaAlugou: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
@@ -24,9 +28,13 @@ export function BookDetailDialog({
   book,
   isFavorite,
   onToggleFavorite,
+  onRent,
+  renting,
+  jaAlugou,
   open,
   onOpenChange,
 }: BookDetailDialogProps) {
+  const bloqueado = !book || !book.available || jaAlugou;
   if (!book) return null;
 
   return (
@@ -85,17 +93,22 @@ export function BookDetailDialog({
             <div className="mt-auto flex items-center gap-2 pt-2">
               <button
                 type="button"
-                disabled={!book.available}
+                disabled={bloqueado || renting}
+                onClick={() => onRent(book)}
                 className={cn(
                   "h-10 flex-1 rounded-lg text-sm font-medium transition-all",
-                  book.available
+                  !bloqueado && !renting
                     ? "bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98]"
                     : "cursor-not-allowed bg-secondary text-muted-foreground",
                 )}
               >
-                {book.available
-                  ? `Alugar agora · ${book.copies} disp.`
-                  : "Entrar na fila de espera"}
+                {renting
+                  ? "Alugando..."
+                  : jaAlugou
+                    ? "Você já tem este exemplar"
+                    : book.available
+                      ? `Alugar agora · ${book.copies} disp.`
+                      : "Indisponível no momento"}
               </button>
 
               <button

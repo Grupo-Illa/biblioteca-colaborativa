@@ -135,7 +135,15 @@ export function FilterPanel({
           min={0}
           max={5}
           step={0.5}
-          onValueChange={(v) => onMinRatingChange(v[0])}
+          onValueChange={(v) => {
+            // @base-ui/react emite `number` em sliders de valor unico
+            // (Thumb unico => values.length === 1 => range === false),
+            // enquanto o Radix emite `[number]`. Accepta os dois formatos.
+            const next = Array.isArray(v) ? v[0] : v;
+            if (typeof next === "number" && !Number.isNaN(next)) {
+              onMinRatingChange(next);
+            }
+          }}
           aria-label="Avaliação mínima"
         />
       </div>

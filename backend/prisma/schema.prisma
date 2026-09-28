@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -16,6 +17,13 @@ enum StatusAluguel {
   ALUGADO
 }
 
+// Situacao de um aluguel individual, diferente do status agregado do livro.
+enum StatusEmprestimo {
+  ATIVO
+  DEVOLVIDO
+  VENCIDO
+}
+
 model Livro {
   id                Int           @id @default(autoincrement())
   titulo            String        @db.VarChar(255)
@@ -23,19 +31,39 @@ model Livro {
   dataLancamento    DateTime      @db.Date
   editora           String        @db.VarChar(255)
   statusAluguel     StatusAluguel @default(DISPONIVEL)
+  quantidadeTotal   Int           @default(1)
   quantidadeAlugada Int           @default(0)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
+  emprestimos       Emprestimo[]
+}
+
+// Cada linha e um exemplar retirado por um usuario. E o que permite bloquear
+// o segundo aluguel do mesmo titulo e contar o prazo de devolucao.
+model Emprestimo {
+  id             Int              @id @default(autoincrement())
+  userId         Int
+  livroId        Int
+  dataAluguel    DateTime         @default(now())
+  prazoDevolucao DateTime
+  dataDevolucao  DateTime?
+  status         StatusEmprestimo @default(ATIVO)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  livro          Livro            @relation(fields: [livroId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([livroId, status])
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  username  String   @db.VarChar(255)
-  password  String   @db.VarChar(255)
-  email     String   @unique @db.VarChar(255)
-  birthday  DateTime @db.Date
-  role      Role     @default(USER)
-  phone     String?  @db.VarChar(50)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          Int          @id @default(autoincrement())
+  username    String       @db.VarChar(255)
+  password    String       @db.VarChar(255)
+  email       String       @unique @db.VarChar(255)
+  birthday    DateTime     @db.Date
+  role        Role         @default(USER)
+  phone       String?      @db.VarChar(50)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  emprestimos Emprestimo[]
 }
