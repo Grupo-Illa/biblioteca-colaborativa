@@ -1,125 +1,148 @@
-"use client"
+"use client";
 
-import { useCallback, useEffect, useState } from "react"
-import { BookOpen, Loader2, Plus, Pencil, Trash2, X, Search, Check, ChevronDown } from "lucide-react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
-import type { Livro, LivroPayload } from "@/lib/api"
-import { getLivros, createBook, updateBook, deleteBook } from "@/lib/api"
+import {
+  BookOpen,
+  Check,
+  ChevronDown,
+  Loader2,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import type { DadosLivro, LivroApi } from "@/lib/api";
+import {
+  atualizarLivro,
+  buscarLivros,
+  criarLivro,
+  deletarLivro,
+} from "@/lib/api";
+import { cn } from "@/lib/utils";
 
-type AdminBookModalProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}
+type PropsModalAcervo = {
+  aberto: boolean;
+  aoMudarAbertura: (aberto: boolean) => void;
+};
 
-type FormMode = "create" | "edit"
+type ModoFormulario = "criar" | "editar";
 
-const emptyForm: LivroPayload = {
+const formularioVazio: DadosLivro = {
   titulo: "",
   autor: "",
   dataLancamento: "",
   editora: "",
   statusAluguel: "DISPONIVEL",
   quantidadeTotal: 1,
-}
+};
 
-export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
-  const [livros, setLivros] = useState<Livro[]>([])
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState("")
-  const [formOpen, setFormOpen] = useState(false)
-  const [formMode, setFormMode] = useState<FormMode>("create")
-  const [formData, setFormData] = useState<LivroPayload>(emptyForm)
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState("")
+export function ModalAcervo({ aberto, aoMudarAbertura }: PropsModalAcervo) {
+  const [livros, setLivros] = useState<LivroApi[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [busca, setBusca] = useState("");
+  const [formularioAberto, setFormularioAberto] = useState(false);
+  const [modoFormulario, setModoFormulario] = useState<ModoFormulario>("criar");
+  const [dadosFormulario, setDadosFormulario] =
+    useState<DadosLivro>(formularioVazio);
+  const [idEmEdicao, setIdEmEdicao] = useState<number | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState("");
 
-  const fetchLivros = useCallback(async () => {
-    setLoading(true)
+  const carregarLivros = useCallback(async () => {
+    setCarregando(true);
     try {
-      const data = await getLivros()
-      setLivros(data)
+      const dados = await buscarLivros();
+      setLivros(dados);
     } catch {
-      setError("Erro ao carregar livros")
+      setErro("Erro ao carregar livros");
     } finally {
-      setLoading(false)
+      setCarregando(false);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    if (open) {
-      fetchLivros()
-      setFormOpen(false)
-      setError("")
+    if (aberto) {
+      carregarLivros();
+      setFormularioAberto(false);
+      setErro("");
     }
-  }, [open, fetchLivros])
+  }, [aberto, carregarLivros]);
 
-  const filtered = livros.filter(
+  const filtrados = livros.filter(
     (l) =>
-      l.titulo.toLowerCase().includes(search.toLowerCase()) ||
-      l.autor.toLowerCase().includes(search.toLowerCase()) ||
-      l.editora.toLowerCase().includes(search.toLowerCase()),
-  )
+      l.titulo.toLowerCase().includes(busca.toLowerCase()) ||
+      l.autor.toLowerCase().includes(busca.toLowerCase()) ||
+      l.editora.toLowerCase().includes(busca.toLowerCase()),
+  );
 
-  function openCreateForm() {
-    setFormMode("create")
-    setEditingId(null)
-    setFormData(emptyForm)
-    setFormOpen(true)
-    setError("")
+  function abrirFormularioCriacao() {
+    setModoFormulario("criar");
+    setIdEmEdicao(null);
+    setDadosFormulario(formularioVazio);
+    setFormularioAberto(true);
+    setErro("");
   }
 
-  function openEditForm(livro: Livro) {
-    setFormMode("edit")
-    setEditingId(livro.id)
-    setFormData({
+  function abrirFormularioEdicao(livro: LivroApi) {
+    setModoFormulario("editar");
+    setIdEmEdicao(livro.id);
+    setDadosFormulario({
       titulo: livro.titulo,
       autor: livro.autor,
       dataLancamento: livro.dataLancamento.split("T")[0],
       editora: livro.editora,
       statusAluguel: livro.statusAluguel,
       quantidadeTotal: livro.quantidadeTotal,
-    })
-    setFormOpen(true)
-    setError("")
+    });
+    setFormularioAberto(true);
+    setErro("");
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setSubmitting(true)
-    setError("")
+  async function aoEnviar(e: React.FormEvent) {
+    e.preventDefault();
+    setEnviando(true);
+    setErro("");
 
-    const result =
-      formMode === "create"
-        ? await createBook(formData)
-        : await updateBook(editingId!, formData)
+    const resultado =
+      modoFormulario === "criar"
+        ? await criarLivro(dadosFormulario)
+        : await atualizarLivro(idEmEdicao!, dadosFormulario);
 
-    setSubmitting(false)
+    setEnviando(false);
 
-    if (result.error) {
-      setError(result.error)
+    if (resultado.erro) {
+      // O backend manda a mensagem específica do erro de validação.
+      setErro(resultado.mensagem || resultado.erro);
     } else {
-      setFormOpen(false)
-      fetchLivros()
+      setFormularioAberto(false);
+      carregarLivros();
     }
   }
 
-  async function handleDelete(id: number) {
-    if (!confirm("Tem certeza que deseja excluir este livro?")) return
-    setError("")
-    const result = await deleteBook(id)
-    if (result.error) {
-      setError(result.error)
+  async function aoExcluir(id: number) {
+    if (!confirm("Tem certeza que deseja excluir este livro?")) return;
+    setErro("");
+    const resultado = await deletarLivro(id);
+    if (resultado.erro) {
+      setErro(resultado.mensagem || resultado.erro);
     } else {
-      fetchLivros()
+      carregarLivros();
     }
   }
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={aberto} onOpenChange={aoMudarAbertura}>
         <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -131,9 +154,9 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
             </DialogDescription>
           </DialogHeader>
 
-          {error && (
+          {erro && (
             <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {error}
+              {erro}
             </div>
           )}
 
@@ -142,24 +165,24 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
                 placeholder="Buscar na tabela..."
                 className="h-9 w-full rounded-xl border border-border bg-secondary/60 pl-9 pr-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-gold/50 focus:ring-2 focus:ring-gold/20"
               />
             </div>
-            <Button onClick={openCreateForm} size="sm">
+            <Button onClick={abrirFormularioCriacao} size="sm">
               <Plus className="size-4" />
               Novo livro
             </Button>
           </div>
 
           <div className="no-scrollbar flex-1 overflow-auto rounded-xl border border-border">
-            {loading ? (
+            {carregando ? (
               <div className="flex items-center justify-center py-20 text-muted-foreground">
                 <Loader2 className="size-6 animate-spin" />
               </div>
-            ) : filtered.length === 0 ? (
+            ) : filtrados.length === 0 ? (
               <div className="py-20 text-center text-sm text-muted-foreground">
                 Nenhum livro encontrado.
               </div>
@@ -171,27 +194,49 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
                     <th className="px-4 py-3">Título</th>
                     <th className="px-4 py-3">Autor</th>
                     <th className="px-4 py-3">Editora</th>
+                    <th className="px-4 py-3">Exemplares</th>
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((livro) => (
-                    <tr key={livro.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3 text-muted-foreground">{livro.id}</td>
+                  {filtrados.map((livro) => (
+                    <tr
+                      key={livro.id}
+                      className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                    >
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {livro.id}
+                      </td>
                       <td className="px-4 py-3 font-medium">{livro.titulo}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{livro.autor}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{livro.editora}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {livro.autor}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {livro.editora}
+                      </td>
+                      <td className="px-4 py-3 font-mono">
+                        {livro.quantidadeTotal - livro.quantidadeAlugada}/
+                        {livro.quantidadeTotal}
+                      </td>
                       <td className="px-4 py-3">
-                        <Badge variant={livro.statusAluguel === "DISPONIVEL" ? "default" : "secondary"}>
-                          {livro.statusAluguel === "DISPONIVEL" ? "Disponível" : "Alugado"}
+                        <Badge
+                          variant={
+                            livro.statusAluguel === "DISPONIVEL"
+                              ? "default"
+                              : "secondary"
+                          }
+                        >
+                          {livro.statusAluguel === "DISPONIVEL"
+                            ? "Disponível"
+                            : "Alugado"}
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="inline-flex items-center gap-1">
                           <button
                             type="button"
-                            onClick={() => openEditForm(livro)}
+                            onClick={() => abrirFormularioEdicao(livro)}
                             className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                             title="Editar"
                           >
@@ -199,7 +244,7 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDelete(livro.id)}
+                            onClick={() => aoExcluir(livro.id)}
                             className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                             title="Excluir"
                           >
@@ -216,30 +261,36 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Form Dialog */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+      {/* Formulário */}
+      <Dialog open={formularioAberto} onOpenChange={setFormularioAberto}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {formMode === "create" ? "Cadastrar livro" : "Editar livro"}
+              {modoFormulario === "criar" ? "Cadastrar livro" : "Editar livro"}
             </DialogTitle>
             <DialogDescription>
-              {formMode === "create"
+              {modoFormulario === "criar"
                 ? "Preencha os dados para adicionar um novo livro ao acervo."
                 : "Altere as informações do livro selecionado."}
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={aoEnviar} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <label
+                htmlFor="campoTitulo"
+                className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+              >
                 Título
               </label>
               <input
+                id="campoTitulo"
                 type="text"
                 required
-                value={formData.titulo}
-                onChange={(e) => setFormData((p) => ({ ...p, titulo: e.target.value }))}
+                value={dadosFormulario.titulo}
+                onChange={(e) =>
+                  setDadosFormulario((p) => ({ ...p, titulo: e.target.value }))
+                }
                 placeholder="Título do livro"
                 className="h-10 w-full rounded-xl border border-border bg-secondary/60 px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-gold/50 focus:ring-2 focus:ring-gold/20"
               />
@@ -247,27 +298,42 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                <label
+                  htmlFor="campoAutor"
+                  className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+                >
                   Autor
                 </label>
                 <input
+                  id="campoAutor"
                   type="text"
                   required
-                  value={formData.autor}
-                  onChange={(e) => setFormData((p) => ({ ...p, autor: e.target.value }))}
+                  value={dadosFormulario.autor}
+                  onChange={(e) =>
+                    setDadosFormulario((p) => ({ ...p, autor: e.target.value }))
+                  }
                   placeholder="Nome do autor"
                   className="h-10 w-full rounded-xl border border-border bg-secondary/60 px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-gold/50 focus:ring-2 focus:ring-gold/20"
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                <label
+                  htmlFor="campoEditora"
+                  className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+                >
                   Editora
                 </label>
                 <input
+                  id="campoEditora"
                   type="text"
                   required
-                  value={formData.editora}
-                  onChange={(e) => setFormData((p) => ({ ...p, editora: e.target.value }))}
+                  value={dadosFormulario.editora}
+                  onChange={(e) =>
+                    setDadosFormulario((p) => ({
+                      ...p,
+                      editora: e.target.value,
+                    }))
+                  }
                   placeholder="Editora"
                   className="h-10 w-full rounded-xl border border-border bg-secondary/60 px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-gold/50 focus:ring-2 focus:ring-gold/20"
                 />
@@ -277,20 +343,23 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <label
-                  htmlFor="quantidadeTotal"
+                  htmlFor="campoQuantidadeTotal"
                   className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
                 >
                   Exemplares
                 </label>
                 <input
-                  id="quantidadeTotal"
+                  id="campoQuantidadeTotal"
                   type="number"
                   required
                   min={1}
                   step={1}
-                  value={formData.quantidadeTotal ?? 1}
+                  value={dadosFormulario.quantidadeTotal ?? 1}
                   onChange={(e) =>
-                    setFormData((p) => ({ ...p, quantidadeTotal: e.target.valueAsNumber }))
+                    setDadosFormulario((p) => ({
+                      ...p,
+                      quantidadeTotal: e.target.valueAsNumber,
+                    }))
                   }
                   className="h-10 w-full rounded-xl border border-border bg-secondary/60 px-4 text-sm outline-none transition-colors focus:border-gold/50 focus:ring-2 focus:ring-gold/20"
                 />
@@ -299,47 +368,70 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
                 </p>
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                <label
+                  htmlFor="campoDataLancamento"
+                  className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+                >
                   Data de lançamento
                 </label>
                 <input
+                  id="campoDataLancamento"
                   type="date"
                   required
-                  value={formData.dataLancamento}
-                  onChange={(e) => setFormData((p) => ({ ...p, dataLancamento: e.target.value }))}
+                  value={dadosFormulario.dataLancamento}
+                  onChange={(e) =>
+                    setDadosFormulario((p) => ({
+                      ...p,
+                      dataLancamento: e.target.value,
+                    }))
+                  }
                   className="h-10 w-full rounded-xl border border-border bg-secondary/60 px-4 text-sm outline-none transition-colors [color-scheme:inherit] focus:border-gold/50 focus:ring-2 focus:ring-gold/20"
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Status
-                </label>
-                <div className="relative">
-                  <select
-                    value={formData.statusAluguel}
-                    onChange={(e) => setFormData((p) => ({ ...p, statusAluguel: e.target.value as "DISPONIVEL" | "ALUGADO" }))}
-                    className="h-10 w-full appearance-none rounded-xl border border-border bg-secondary/60 px-4 pr-10 text-sm outline-none transition-colors focus:border-gold/50 focus:ring-2 focus:ring-gold/20"
-                  >
-                    <option value="DISPONIVEL">Disponível</option>
-                    <option value="ALUGADO">Alugado</option>
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                </div>
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="campoStatus"
+                className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+              >
+                Status
+              </label>
+              <div className="relative">
+                <select
+                  id="campoStatus"
+                  value={dadosFormulario.statusAluguel}
+                  onChange={(e) =>
+                    setDadosFormulario((p) => ({
+                      ...p,
+                      statusAluguel: e.target.value as "DISPONIVEL" | "ALUGADO",
+                    }))
+                  }
+                  className="h-10 w-full appearance-none rounded-xl border border-border bg-secondary/60 px-4 pr-10 text-sm outline-none transition-colors focus:border-gold/50 focus:ring-2 focus:ring-gold/20"
+                >
+                  <option value="DISPONIVEL">Disponível</option>
+                  <option value="ALUGADO">Alugado</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setFormularioAberto(false)}
+              >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={submitting}>
-                {submitting && <Loader2 className="size-4 animate-spin" />}
-                {formMode === "create" ? "Cadastrar" : "Salvar"}
+              <Button type="submit" disabled={enviando}>
+                {enviando && <Loader2 className="size-4 animate-spin" />}
+                {modoFormulario === "criar" ? "Cadastrar" : "Salvar"}
               </Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
     </>
-  )
+  );
 }

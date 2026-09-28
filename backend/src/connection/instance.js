@@ -1,13 +1,14 @@
 import { PrismaClient } from "@prisma/client";
 
 class instanciaPrisma {
-    static Prisma = null
+    // Instancia unica, criada sob demanda no primeiro uso.
+    static ClientePrisma = null
 
-    static getConnection() {
-        if (!this.Prisma) {
-            this.Prisma = new PrismaClient()
+    static obterConexao() {
+        if (!this.ClientePrisma) {
+            this.ClientePrisma = new PrismaClient()
         }
-        return this.Prisma;
+        return this.ClientePrisma;
     }
 }
 

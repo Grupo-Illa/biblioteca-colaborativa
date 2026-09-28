@@ -18,11 +18,11 @@ export function lerFavoritos(email?: string): string[] {
     const bruto = window.localStorage.getItem(chave(email));
     if (!bruto) return [];
 
-    const parsed: unknown = JSON.parse(bruto);
-    if (!Array.isArray(parsed)) return [];
+    const analisado: unknown = JSON.parse(bruto);
+    if (!Array.isArray(analisado)) return [];
 
     // Garante que so strings sobrevivam, evitando dado corrompido.
-    return parsed.filter((id): id is string => typeof id === "string");
+    return analisado.filter((id): id is string => typeof id === "string");
   } catch {
     return [];
   }
@@ -40,13 +40,12 @@ export function gravarFavoritos(email: string | undefined, ids: string[]) {
 
 export function usuarioAtualEmail(): string | undefined {
   if (typeof window === "undefined") return undefined;
-
-  const stored = window.localStorage.getItem("acervo-user");
-  if (!stored) return undefined;
+  const guardado = localStorage.getItem("acervo-usuario");
+  if (!guardado) return undefined;
 
   try {
-    const user = JSON.parse(stored) as { email?: string };
-    return user.email ?? undefined;
+    const usuario = JSON.parse(guardado) as { email?: string };
+    return usuario.email ?? undefined;
   } catch {
     return undefined;
   }

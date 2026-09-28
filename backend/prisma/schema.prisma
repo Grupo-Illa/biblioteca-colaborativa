@@ -7,8 +7,8 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  USER
+enum Perfil {
+  USUARIO
   ADMIN
 }
 
@@ -33,37 +33,56 @@ model Livro {
   statusAluguel     StatusAluguel @default(DISPONIVEL)
   quantidadeTotal   Int           @default(1)
   quantidadeAlugada Int           @default(0)
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  criadoEm          DateTime      @default(now())
+  atualizadoEm      DateTime      @updatedAt
   emprestimos       Emprestimo[]
+  avaliacoes        Avaliacao[]
 }
 
 // Cada linha e um exemplar retirado por um usuario. E o que permite bloquear
 // o segundo aluguel do mesmo titulo e contar o prazo de devolucao.
 model Emprestimo {
   id             Int              @id @default(autoincrement())
-  userId         Int
+  usuarioId      Int
   livroId        Int
   dataAluguel    DateTime         @default(now())
   prazoDevolucao DateTime
   dataDevolucao  DateTime?
   status         StatusEmprestimo @default(ATIVO)
-  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usuario        Usuario          @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   livro          Livro            @relation(fields: [livroId], references: [id], onDelete: Cascade)
 
-  @@index([userId, status])
+  @@index([usuarioId, status])
   @@index([livroId, status])
 }
 
-model User {
-  id          Int          @id @default(autoincrement())
-  username    String       @db.VarChar(255)
-  password    String       @db.VarChar(255)
-  email       String       @unique @db.VarChar(255)
-  birthday    DateTime     @db.Date
-  role        Role         @default(USER)
-  phone       String?      @db.VarChar(50)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  emprestimos Emprestimo[]
+// Nota que o usuario deu para um titulo que ele alugou. Uma avaliacao por
+// usuario por livro: repetir a nota atualiza a anterior em vez de duplicar.
+model Avaliacao {
+  id           Int      @id @default(autoincrement())
+  usuarioId    Int
+  livroId      Int
+  nota         Int
+  comentario   String?  @db.VarChar(500)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+  usuario      Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  livro        Livro    @relation(fields: [livroId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, livroId])
+  @@index([livroId])
+}
+
+model Usuario {
+  id             Int          @id @default(autoincrement())
+  nomeUsuario    String       @db.VarChar(255)
+  senha          String       @db.VarChar(255)
+  email          String       @unique @db.VarChar(255)
+  dataNascimento DateTime     @db.Date
+  perfil         Perfil       @default(USUARIO)
+  telefone       String?      @db.VarChar(50)
+  criadoEm       DateTime     @default(now())
+  atualizadoEm   DateTime     @updatedAt
+  emprestimos    Emprestimo[]
+  avaliacoes     Avaliacao[]
 }

@@ -1,13 +1,13 @@
-import instanciaPrisma from "../../connection/instance.js";
+﻿import instanciaPrisma from "../../connection/instance.js";
 
-const prisma = instanciaPrisma.getConnection();
+const prisma = instanciaPrisma.obterConexao();
 
 // Prazo padrao do aluguel. Ajustavel por .env sem mexer no codigo.
 const DIAS_ALUGUEL = Number.parseInt(process.env.DIAS_ALUGUEL ?? "14", 10);
 const MS_POR_DIA = 86_400_000;
 
 /**
- * Encerra os alugueis cujo prazo passou e devolve as copias ao estoque.
+ * Encerra os aluguéis cujo prazo passou e devolve as cópias ao estoque.
  *
  * Roda dentro da transação de quem chama, para que a leitura de estoque
  * nunca aconteça em cima de um prazo que já venceu. Sem isso o exemplar
@@ -33,35 +33,36 @@ async function encerrarVencidos(tx) {
 }
 
 /** Devolve uma unidade ao estoque e recalcula o status agregado do livro. */
-async function liberarCopia(tx, livroId) {    const livro = await tx.livro.findUnique({ where: { id: Number(livroId) } });
+async function liberarCopia(tx, idLivro) {
+    const livro = await tx.livro.findUnique({ where: { id: Number(idLivro) } });
 
     if (!livro) return null;
 
-    // Math.max evita contador negativo caso o livro ja tivesse sido removido.
+    // Math.max evita contador negativo caso o livro já tivesse sido removido.
     const quantidadeAlugada = Math.max(0, livro.quantidadeAlugada - 1);
     const statusAluguel =
         quantidadeAlugada >= livro.quantidadeTotal ? "ALUGADO" : "DISPONIVEL";
 
     return await tx.livro.update({
-        where: { id: Number(livroId) },
+        where: { id: Number(idLivro) },
         data: { quantidadeAlugada, statusAluguel },
     });
 }
 
 class AluguelRepository {
     /**
-     * Aluga um exemplar para o usuario.
+     * Aluga um exemplar para o usuário.
      *
-     * Tudo dentro de uma transacao porque tres coisas precisam ser coerentes
-     * juntas: nao repetir titulo para o mesmo usuario, nao passar do estoque
-     * e nao liberar um aluguel que ja venceu.
+     * Tudo dentro de uma transação porque três coisas precisam ser coerentes
+     * juntas: não repetir título para o mesmo usuário, não passar do estoque
+     * e não liberar um aluguel que já venceu.
      */
-    async rentBook(userId, livroId) {
+    async alugarLivro(idUsuario, idLivro) {
         return await prisma.$transaction(async (tx) => {
             await encerrarVencidos(tx);
 
             const livro = await tx.livro.findUnique({
-                where: { id: Number(livroId) },
+                where: { id: Number(idLivro) },
             });
 
             if (!livro) {
@@ -69,7 +70,11 @@ class AluguelRepository {
             }
 
             const jaAlugado = await tx.emprestimo.findFirst({
-                where: { userId: Number(userId), livroId: Number(livroId), status: "ATIVO" },
+                where: {
+                    usuarioId: Number(idUsuario),
+                    livroId: Number(idLivro),
+                    status: "ATIVO",
+                },
             });
 
             if (jaAlugado) {
@@ -84,8 +89,8 @@ class AluguelRepository {
 
             const emprestimo = await tx.emprestimo.create({
                 data: {
-                    userId: Number(userId),
-                    livroId: Number(livroId),
+                    usuarioId: Number(idUsuario),
+                    livroId: Number(idLivro),
                     prazoDevolucao: new Date(Date.now() + DIAS_ALUGUEL * MS_POR_DIA),
                 },
             });
@@ -95,7 +100,7 @@ class AluguelRepository {
                 quantidadeAlugada >= livro.quantidadeTotal ? "ALUGADO" : "DISPONIVEL";
 
             await tx.livro.update({
-                where: { id: Number(livroId) },
+                where: { id: Number(idLivro) },
                 data: { quantidadeAlugada, statusAluguel },
             });
 
@@ -107,13 +112,13 @@ class AluguelRepository {
         });
     }
 
-    /** Lista os alugueis do usuario, encerrando antes os que ja venceram. */
-    async listByUser(userId) {
+    /** Lista os aluguéis do usuário, encerrando antes os que já venceram. */
+    async listarPorUsuario(idUsuario) {
         return await prisma.$transaction(async (tx) => {
             await encerrarVencidos(tx);
 
             return await tx.emprestimo.findMany({
-                where: { userId: Number(userId) },
+                where: { usuarioId: Number(idUsuario) },
                 orderBy: { dataAluguel: "desc" },
                 include: {
                     livro: {
@@ -131,20 +136,20 @@ class AluguelRepository {
         });
     }
 
-    /** Devolucao feita pelo proprio usuario. */
-    async returnBook(userId, emprestimoId) {
+    /** Devolução feita pelo próprio usuário. */
+    async devolverLivro(idUsuario, idEmprestimo) {
         return await prisma.$transaction(async (tx) => {
             await encerrarVencidos(tx);
 
             const emprestimo = await tx.emprestimo.findUnique({
-                where: { id: Number(emprestimoId) },
+                where: { id: Number(idEmprestimo) },
             });
 
             if (!emprestimo) {
                 throw new Error("Repository: Aluguel não encontrado!");
             }
 
-            if (emprestimo.userId !== Number(userId)) {
+            if (emprestimo.usuarioId !== Number(idUsuario)) {
                 throw new Error("Repository: Este aluguel não pertence a você!");
             }
 
@@ -159,8 +164,8 @@ class AluguelRepository {
 
             const livro = await liberarCopia(tx, emprestimo.livroId);
 
-            // Releitura obrigatoria: `emprestimo` ainda e a versao anterior ao
-            // update, e devolve-lo faria a API responder status ATIVO logo
+            // Releitura obrigatória: `emprestimo` ainda é a versão anterior ao
+            // update, e devolvê-lo faria a API responder status ATIVO logo
             // depois de devolver o livro.
             const atualizado = await tx.emprestimo.findUnique({
                 where: { id: emprestimo.id },

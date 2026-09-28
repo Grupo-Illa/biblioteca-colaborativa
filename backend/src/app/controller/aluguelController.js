@@ -21,77 +21,77 @@ function mensagemLimpa(mensagem) {
 
 class AluguelController {
 
-    async rentController(req, res) {
+    async alugarController(requisicao, resposta) {
         try {
-            const { id } = req.params;
-            const livroId = parseInt(id, 10);
+            const { id } = requisicao.params;
+            const idLivro = parseInt(id, 10);
 
-            if (isNaN(livroId)) {
-                return res.status(400).json({ message: "ID inválido!" });
+            if (isNaN(idLivro)) {
+                return resposta.status(400).json({ mensagem: "ID inválido!" });
             }
 
-            // requireAuth ja carregou o usuario, entao nao ha como alugar
-            // em nome de outra pessoa.
-            const { emprestimo, disponiveis } = await aluguelRepository.rentBook(
-                req.user.id,
-                livroId
+            // exigirAutenticacao ja carregou o usuario, entao nao ha como
+            // alugar em nome de outra pessoa.
+            const { emprestimo, disponiveis } = await aluguelRepository.alugarLivro(
+                requisicao.usuario.id,
+                idLivro
             );
 
-            return res.status(201).json({
-                message: "Livro alugado com sucesso!",
+            return resposta.status(201).json({
+                mensagem: "Livro alugado com sucesso!",
                 data: emprestimo,
                 disponiveis,
             });
 
-        } catch (error) {
-            const status = statusPorMensagem(error.message);
+        } catch (erro) {
+            const status = statusPorMensagem(erro.message);
 
-            return res.status(status).json({
-                message: status === 500 ? "Erro ao alugar livro!" : mensagemLimpa(error.message),
-                error: error.message,
+            return resposta.status(status).json({
+                mensagem: status === 500 ? "Erro ao alugar livro!" : mensagemLimpa(erro.message),
+                erro: erro.message,
             });
         }
     }
 
-    async listMineController(req, res) {
+    async listarMeusController(requisicao, resposta) {
         try {
-            const alugueis = await aluguelRepository.listByUser(req.user.id);
-            return res.status(200).json(alugueis);
+            const alugueis = await aluguelRepository.listarPorUsuario(requisicao.usuario.id);
+            return resposta.status(200).json(alugueis);
 
-        } catch (error) {
-            return res.status(500).json({
-                message: "Erro ao buscar seus aluguéis!",
-                error: error.message
+        } catch (erro) {
+            return resposta.status(500).json({
+                mensagem: "Erro ao buscar seus aluguéis!",
+                erro: erro.message
             });
         }
     }
 
-    async returnController(req, res) {
+    async devolverController(requisicao, resposta) {
         try {
-            const { id } = req.params;
-            const emprestimoId = parseInt(id, 10);
+            const { id } = requisicao.params;
+            const idEmprestimo = parseInt(id, 10);
 
-            if (isNaN(emprestimoId)) {
-                return res.status(400).json({ message: "ID inválido!" });
+            if (isNaN(idEmprestimo)) {
+                return resposta.status(400).json({ mensagem: "ID inválido!" });
             }
 
-            const { emprestimo, livro } = await aluguelRepository.returnBook(
-                req.user.id,
-                emprestimoId
+            const { emprestimo, livro } = await aluguelRepository.devolverLivro(
+                requisicao.usuario.id,
+                idEmprestimo
             );
 
-            return res.status(200).json({
-                message: "Livro devolvido com sucesso!",
+            return resposta.status(200).json({
+                mensagem: "Livro devolvido com sucesso!",
                 data: emprestimo,
                 disponiveis: livro ? livro.quantidadeTotal - livro.quantidadeAlugada : 0,
             });
 
-        } catch (error) {
-            const status = statusPorMensagem(error.message);
+        } catch (erro) {
+            const status = statusPorMensagem(erro.message);
 
-            return res.status(status).json({
-                message: status === 500 ? "Erro ao devolver livro!" : mensagemLimpa(error.message),
-                error: error.message,
+            return resposta.status(status).json({
+                mensagem: status === 500 ? "Erro ao devolver livro!" : mensagemLimpa(erro.message),
+                erro: erro.message,
             });
         }
     }

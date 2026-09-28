@@ -5,11 +5,11 @@ import { useEffect, useState } from "react";
 import type { Emprestimo } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-type MeusAlugueisProps = {
+type PropsMeusAlugueis = {
   alugueis: Emprestimo[];
   carregando: boolean;
   devolvendoId: number | null;
-  onDevolver: (emprestimoId: number) => void;
+  aoDevolver: (idEmprestimo: number) => void;
 };
 
 const MS_POR_DIA = 86_400_000;
@@ -52,8 +52,8 @@ export function MeusAlugueis({
   alugueis,
   carregando,
   devolvendoId,
-  onDevolver,
-}: MeusAlugueisProps) {
+  aoDevolver,
+}: PropsMeusAlugueis) {
   const [aberto, setAberto] = useState(false);
 
   // Avanca a cada minuto para a contagem nao congelar na data de montagem.
@@ -163,7 +163,7 @@ export function MeusAlugueis({
                       <button
                         type="button"
                         disabled={devolvendo}
-                        onClick={() => onDevolver(aluguel.id)}
+                        onClick={() => aoDevolver(aluguel.id)}
                         className="mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-primary text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
                       >
                         {devolvendo ? (

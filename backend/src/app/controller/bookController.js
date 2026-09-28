@@ -1,21 +1,21 @@
-import BookRepository from "../repository/bookRepository.js";
+import LivroRepository from "../repository/bookRepository.js";
 
-const bookRepository = new BookRepository();
+const livroRepository = new LivroRepository();
 
 /**
  * Erros de entrada tem que sair como 4xx, nao 500. Sem isto o admin que
  * digita 0 exemplares receberia "Erro ao cadastrar livro!" em vez do motivo
  * real, e o log marcaria uma falha de servidor inexistente.
  */
-function respostaDeErro(error, acao) {
-    const mensagem = error.message ?? "";
+function respostaDeErro(erro, acao) {
+    const mensagem = erro.message ?? "";
 
     if (mensagem.includes('não encontrado')) {
-        return { status: 404, message: 'Registro não encontrado!' };
+        return { status: 404, mensagem: 'Registro não encontrado!' };
     }
 
     if (mensagem.includes('Já existe')) {
-        return { status: 409, message: mensagem.replace('Repository: ', '') };
+        return { status: 409, mensagem: mensagem.replace('Repository: ', '') };
     }
 
     // Validacao de dado enviado pelo cliente.
@@ -23,105 +23,104 @@ function respostaDeErro(error, acao) {
         mensagem.includes('deve ser no mínimo') ||
         mensagem.includes('Não é possível ter menos')
     ) {
-        return { status: 400, message: mensagem.replace('Repository: ', '') };
+        return { status: 400, mensagem: mensagem.replace('Repository: ', '') };
     }
 
-    return { status: 500, message: `Erro ao ${acao}!` };
+    return { status: 500, mensagem: `Erro ao ${acao}!` };
 }
 
-class BookController {
+class LivroController {
 
-    async createController(req, res) {
+    async criarController(requisicao, resposta) {
         try {
-            const data = req.body;
+            const dados = requisicao.body;
             const camposObrigatorios = ['titulo', 'autor', 'dataLancamento', 'editora'];
 
             for (const campo of camposObrigatorios) {
-                if (!data[campo]) {
-                    return res.status(400).json({
-                        message: `Campo obrigatório ausente: "${campo}"`
+                if (!dados[campo]) {
+                    return resposta.status(400).json({
+                        mensagem: `Campo obrigatório ausente: "${campo}"`
                     });
                 }
             }
 
-            const livro = await bookRepository.createBook(data);
-            return res.status(201).json({ message: 'Livro cadastrado com sucesso!', data: livro });
+            const livro = await livroRepository.criarLivro(dados);
+            return resposta.status(201).json({ mensagem: 'Livro cadastrado com sucesso!', data: livro });
 
-        } catch (error) {
-            const { status, message } = respostaDeErro(error, 'cadastrar livro');
-            return res.status(status).json({ message, error: error.message });
+        } catch (erro) {
+            const { status, mensagem } = respostaDeErro(erro, 'cadastrar livro');
+            return resposta.status(status).json({ mensagem, erro: erro.message });
         }
     }
 
-    async showController(req, res) {
+    async listarController(requisicao, resposta) {
         try {
-            const livros = await bookRepository.showAllBooks();
-            return res.status(200).json(livros);
-        } catch (error) {
-            return res.status(500).json({
-                message: 'Erro ao buscar livros!',
-                error: error.message
+            const livros = await livroRepository.listarTodos();
+            return resposta.status(200).json(livros);
+        } catch (erro) {
+            return resposta.status(500).json({
+                mensagem: 'Erro ao buscar livros!',
+                erro: erro.message
             });
         }
     }
 
-    async showByIdController(req, res) {
+    async buscarPorIdController(requisicao, resposta) {
         try {
-            const { id } = req.params;
-            const userId = parseInt(id, 10);
+            const { id } = requisicao.params;
+            const idLivro = parseInt(id, 10);
 
-            if (isNaN(userId)) {
-                return res.status(400).json({ message: 'ID inválido!' });
+            if (isNaN(idLivro)) {
+                return resposta.status(400).json({ mensagem: 'ID inválido!' });
             }
 
-            const livro = await bookRepository.showBookById(userId);
-            return res.status(200).json(livro);
+            const livro = await livroRepository.buscarPorId(idLivro);
+            return resposta.status(200).json(livro);
 
-        } catch (error) {
-            const status = error.message.includes('não encontrado') ? 404 : 500;
-            return res.status(status).json({
-                message: 'Erro ao buscar livro!',
-                error: error.message
+        } catch (erro) {
+            const status = erro.message.includes('não encontrado') ? 404 : 500;
+            return resposta.status(status).json({
+                mensagem: 'Erro ao buscar livro!',
+                erro: erro.message
             });
         }
     }
 
-    async updateController(req, res) {
+    async atualizarController(requisicao, resposta) {
         try {
-            const { id } = req.params;
-            const data = req.body;
-            const livroId = parseInt(id, 10);
+            const { id } = requisicao.params;
+            const idLivro = parseInt(id, 10);
 
-            if (isNaN(livroId)) {
-                return res.status(400).json({ message: 'ID inválido!' });
+            if (isNaN(idLivro)) {
+                return resposta.status(400).json({ mensagem: 'ID inválido!' });
             }
 
-            const livro = await bookRepository.updateBook(livroId, data);
-            return res.status(200).json({ message: 'Livro atualizado com sucesso!', data: livro });
+            const livro = await livroRepository.atualizarLivro(idLivro, requisicao.body);
+            return resposta.status(200).json({ mensagem: 'Livro atualizado com sucesso!', data: livro });
 
-        } catch (error) {
-            const { status, message } = respostaDeErro(error, 'atualizar livro');
-            return res.status(status).json({ message, error: error.message });
+        } catch (erro) {
+            const { status, mensagem } = respostaDeErro(erro, 'atualizar livro');
+            return resposta.status(status).json({ mensagem, erro: erro.message });
         }
     }
 
-    async deleteController(req, res) {
+    async deletarController(requisicao, resposta) {
         try {
-            const { id } = req.params;
-            const livroId = parseInt(id, 10);
+            const { id } = requisicao.params;
+            const idLivro = parseInt(id, 10);
 
-            if (isNaN(livroId)) {
-                return res.status(400).json({ message: 'ID inválido!' });
+            if (isNaN(idLivro)) {
+                return resposta.status(400).json({ mensagem: 'ID inválido!' });
             }
 
-            const result = await bookRepository.deleteBook(livroId);
-            return res.status(200).json(result);
+            const resultado = await livroRepository.deletarLivro(idLivro);
+            return resposta.status(200).json(resultado);
 
-        } catch (error) {
-            const { status, message } = respostaDeErro(error, 'deletar livro');
-            return res.status(status).json({ message, error: error.message });
+        } catch (erro) {
+            const { status, mensagem } = respostaDeErro(erro, 'deletar livro');
+            return resposta.status(status).json({ mensagem, erro: erro.message });
         }
     }
 }
 
-export default BookController;
+export default LivroController;

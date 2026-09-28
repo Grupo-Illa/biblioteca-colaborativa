@@ -1,16 +1,14 @@
-import { faker } from '@faker-js/faker/locale/pt_BR';
+﻿import { faker } from '@faker-js/faker/locale/pt_BR';
 import instanciaPrisma from '../../connection/instance.js';
 
-const prisma = instanciaPrisma.getConnection();
+const prisma = instanciaPrisma.obterConexao();
 
 const editoras = [
-    'Companhia das Letras', 'Record', 'Intrínseca', 'Rocco',
+    'Compania das Letras', 'Record', 'IntrÃ­nseca', 'Rocco',
     'Planeta', 'Sextante', 'Darkside', 'Arqueiro', 'Alta Books', 'Novatec'
 ];
 
-const statusOpcoes = ['DISPONIVEL', 'ALUGADO'];
-
-async function createRandomBooks() {
+async function criarLivrosAleatorios() {
     const total = await prisma.livro.count();
 
     if (total > 0) {
@@ -18,14 +16,14 @@ async function createRandomBooks() {
         return;
     }
 
-    const seeds = [];
+    const registros = [];
 
     for (let i = 1; i <= 20; i++) {
         // Sem um total de copias nao dava para calcular o que esta disponivel.
         const quantidadeTotal = faker.number.int({ min: 1, max: 8 });
         const quantidadeAlugada = faker.number.int({ min: 0, max: quantidadeTotal });
 
-        seeds.push(
+        registros.push(
             prisma.livro.create({
                 data: {
                     titulo: faker.lorem.words({ min: 2, max: 5 }),
@@ -41,13 +39,13 @@ async function createRandomBooks() {
         );
     }
 
-    await prisma.$transaction(seeds);
-    console.log('✅ 20 livros de seed gerados com sucesso!');
+    await prisma.$transaction(registros);
+    console.log('âœ… 20 livros de seed gerados com sucesso!');
 }
 
-createRandomBooks()
-    .catch((e) => {
-        console.error('❌ Erro ao gerar seeds:', e);
+criarLivrosAleatorios()
+    .catch((erro) => {
+        console.error('âŒ Erro ao gerar seeds:', erro);
     })
     .finally(async () => {
         await prisma.$disconnect();

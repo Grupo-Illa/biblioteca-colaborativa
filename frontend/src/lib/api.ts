@@ -1,4 +1,8 @@
-export type Livro = {
+/**
+ * Formato que o backend devolve em /livros. Ainda espelha o schema do Prisma,
+ * por isso os nomes seguem o mesmo padrao de caixa alta.
+ */
+export type LivroApi = {
   id: number;
   titulo: string;
   autor: string;
@@ -7,26 +11,31 @@ export type Livro = {
   statusAluguel: "DISPONIVEL" | "ALUGADO";
   quantidadeTotal: number;
   quantidadeAlugada: number;
+  /** Media das avaliacoes. null quando ninguem avaliou o titulo ainda. */
+  notaMedia: number | null;
+  quantidadeAvaliacoes: number;
 };
 
-export type Book = {
+/** Formato usado pelos componentes de tela. */
+export type Livro = {
   id: string;
-  title: string;
-  author: string;
-  category: string;
-  cover: string;
-  year: number;
-  rating: number;
-  available: boolean;
-  copies: number;
-  pages: number;
-  description: string;
+  titulo: string;
+  autor: string;
+  categoria: string;
+  capa: string;
+  ano: number;
+  nota: number;
+  quantidadeAvaliacoes: number;
+  disponivel: boolean;
+  copias: number;
+  paginas: number;
+  descricao: string;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+const BASE_API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
-function mapLivroToBook(livro: Livro): Book {
-  // Disponiveis e o total menos o que ja foi alugado. Antes o campo "copies"
+function mapearParaLivro(livro: LivroApi): Livro {
+  // Disponiveis e o total menos o que ja foi alugado. Antes o campo "copias"
   // recebia quantidadeAlugada, o que exibia o alugado como se fosse disponivel.
   const disponiveis = Math.max(
     0,
@@ -35,42 +44,45 @@ function mapLivroToBook(livro: Livro): Book {
 
   return {
     id: String(livro.id),
-    title: livro.titulo,
-    author: livro.autor,
-    category: livro.editora,
-    cover: "/placeholder.svg",
-    year: new Date(livro.dataLancamento).getFullYear(),
-    rating: 0,
-    available: disponiveis > 0,
-    copies: disponiveis,
-    pages: 0,
-    description: "",
+    titulo: livro.titulo,
+    autor: livro.autor,
+    categoria: livro.editora,
+    capa: "/placeholder.svg",
+    ano: new Date(livro.dataLancamento).getFullYear(),
+    // Titulo sem avaliacao alguma precisa virar 0, e nao null, porque o card
+    // e o filtro de nota minima fazem conta aritmetica com este campo.
+    nota: livro.notaMedia ?? 0,
+    quantidadeAvaliacoes: livro.quantidadeAvaliacoes ?? 0,
+    disponivel: disponiveis > 0,
+    copias: disponiveis,
+    paginas: 0,
+    descricao: "",
   };
 }
 
-export async function getBooks(): Promise<Book[]> {
+export async function listarLivros(): Promise<Livro[]> {
   try {
-    const res = await fetch(`${API_BASE}/livros/buscarTodos`, {
+    const resposta = await fetch(`${BASE_API}/livros/buscarTodos`, {
       next: { revalidate: 30 },
     });
-    if (!res.ok) throw new Error(`Erro ${res.status}`);
-    const livros: Livro[] = await res.json();
-    return livros.map(mapLivroToBook);
+    if (!resposta.ok) throw new Error(`Erro ${resposta.status}`);
+    const livros: LivroApi[] = await resposta.json();
+    return livros.map(mapearParaLivro);
   } catch {
     return [];
   }
 }
 
-export type User = {
+export type Usuario = {
   id: number;
-  username: string;
+  nomeUsuario: string;
   email: string;
-  role: "USER" | "ADMIN";
-  birthday: string;
-  phone?: string;
+  perfil: "USUARIO" | "ADMIN";
+  dataNascimento: string;
+  telefone?: string;
 };
 
-export type LivroPayload = {
+export type DadosLivro = {
   titulo: string;
   autor: string;
   dataLancamento: string;
@@ -84,7 +96,7 @@ export type StatusEmprestimo = "ATIVO" | "DEVOLVIDO" | "VENCIDO";
 
 export type Emprestimo = {
   id: number;
-  userId: number;
+  usuarioId: number;
   livroId: number;
   dataAluguel: string;
   prazoDevolucao: string;
@@ -100,149 +112,252 @@ export type Emprestimo = {
   };
 };
 
-type AuthResponse = {
-  message: string;
-  user?: User;
-  error?: string;
+type RespostaAutenticacao = {
+  mensagem: string;
+  usuario?: Usuario;
+  erro?: string;
 };
 
-export async function registerUser(data: {
-  username: string;
+export async function cadastrarUsuario(dados: {
+  nomeUsuario: string;
   email: string;
-  password: string;
-  birthday: string;
-  phone?: string;
-}): Promise<AuthResponse> {
+  senha: string;
+  dataNascimento: string;
+  telefone?: string;
+}): Promise<RespostaAutenticacao> {
   try {
-    const res = await fetch(`${API_BASE}/usuarios/cadastrar`, {
+    const resposta = await fetch(`${BASE_API}/usuarios/cadastrar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      body: JSON.stringify(dados),
     });
-    return await res.json();
+    return await resposta.json();
   } catch {
-    return { message: "Erro de conexão com o servidor", error: "network" };
+    return { mensagem: "Erro de conexão com o servidor", erro: "rede" };
   }
 }
 
-export async function loginUser(email: string, password: string): Promise<AuthResponse> {
+export async function entrar(
+  email: string,
+  senha: string,
+): Promise<RespostaAutenticacao> {
   try {
-    const res = await fetch(`${API_BASE}/usuarios/login`, {
+    const resposta = await fetch(`${BASE_API}/usuarios/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, senha }),
     });
-    return await res.json();
+    return await resposta.json();
   } catch {
-    return { message: "Erro de conexão com o servidor", error: "network" };
+    return { mensagem: "Erro de conexão com o servidor", erro: "rede" };
   }
 }
 
-function getAdminHeaders(): Record<string, string> {
-  if (typeof window === "undefined") return { "Content-Type": "application/json" };
-  const stored = localStorage.getItem("acervo-user");
-  const user: User | null = stored ? JSON.parse(stored) : null;
+/**
+ * O backend identifica o usuario pelo header, nao por token. As duas funcoes
+ * abaixo sao iguais hoje; a separacao existe para o dia em que uma delas
+ * passar a exigir perfil ADMIN.
+ */
+function cabecalhosDeAutenticacao(): Record<string, string> {
+  if (typeof window === "undefined")
+    return { "Content-Type": "application/json" };
+  const guardado = localStorage.getItem("acervo-usuario");
+  const usuario: Usuario | null = guardado ? JSON.parse(guardado) : null;
   return {
     "Content-Type": "application/json",
-    "x-user-email": user?.email ?? "",
+    "x-usuario-email": usuario?.email ?? "",
   };
 }
 
-function getAuthHeaders(): Record<string, string> {
-  if (typeof window === "undefined") return { "Content-Type": "application/json" };
-  const stored = localStorage.getItem("acervo-user");
-  const user: User | null = stored ? JSON.parse(stored) : null;
-  return {
-    "Content-Type": "application/json",
-    "x-user-email": user?.email ?? "",
-  };
+function cabecalhosDeAdministrador(): Record<string, string> {
+  return cabecalhosDeAutenticacao();
 }
 
-export async function getLivros(): Promise<Livro[]> {
-  const res = await fetch(`${API_BASE}/livros/buscarTodos`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Erro ${res.status}`);
-  return res.json();
+export async function buscarLivros(): Promise<LivroApi[]> {
+  const resposta = await fetch(`${BASE_API}/livros/buscarTodos`, {
+    cache: "no-store",
+  });
+  if (!resposta.ok) throw new Error(`Erro ${resposta.status}`);
+  return resposta.json();
 }
 
-export async function createBook(data: LivroPayload): Promise<{ message: string; data?: Livro; error?: string }> {
+export async function criarLivro(
+  dados: DadosLivro,
+): Promise<{ mensagem: string; data?: LivroApi; erro?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/livros/cadastrar`, {
+    const resposta = await fetch(`${BASE_API}/livros/cadastrar`, {
       method: "POST",
-      headers: getAdminHeaders(),
-      body: JSON.stringify(data),
+      headers: cabecalhosDeAdministrador(),
+      body: JSON.stringify(dados),
     });
-    return await res.json();
+    return await resposta.json();
   } catch {
-    return { message: "Erro de conexão com o servidor", error: "network" };
+    return { mensagem: "Erro de conexão com o servidor", erro: "rede" };
   }
 }
 
-export async function updateBook(id: number, data: Partial<LivroPayload>): Promise<{ message: string; data?: Livro; error?: string }> {
+export async function atualizarLivro(
+  id: number,
+  dados: Partial<DadosLivro>,
+): Promise<{ mensagem: string; data?: LivroApi; erro?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/livros/atualizar/${id}`, {
+    const resposta = await fetch(`${BASE_API}/livros/atualizar/${id}`, {
       method: "PATCH",
-      headers: getAdminHeaders(),
-      body: JSON.stringify(data),
+      headers: cabecalhosDeAdministrador(),
+      body: JSON.stringify(dados),
     });
-    return await res.json();
+    return await resposta.json();
   } catch {
-    return { message: "Erro de conexão com o servidor", error: "network" };
+    return { mensagem: "Erro de conexão com o servidor", erro: "rede" };
   }
 }
 
-export async function deleteBook(id: number): Promise<{ message: string; error?: string }> {
+export async function deletarLivro(
+  id: number,
+): Promise<{ mensagem: string; erro?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/livros/deletar/${id}`, {
+    const resposta = await fetch(`${BASE_API}/livros/deletar/${id}`, {
       method: "DELETE",
-      headers: getAdminHeaders(),
+      headers: cabecalhosDeAdministrador(),
     });
-    return await res.json();
+    return await resposta.json();
   } catch {
-    return { message: "Erro de conexão com o servidor", error: "network" };
+    return { mensagem: "Erro de conexão com o servidor", erro: "rede" };
   }
 }
 
-export type AluguelResponse = {
-  message: string;
+export type RespostaAluguel = {
+  mensagem: string;
   data?: Emprestimo;
   disponiveis?: number;
-  error?: string;
+  erro?: string;
 };
 
-export async function rentBook(id: number): Promise<AluguelResponse> {
+export async function alugarLivro(id: number): Promise<RespostaAluguel> {
   try {
-    const res = await fetch(`${API_BASE}/alugueis/alugar/${id}`, {
+    const resposta = await fetch(`${BASE_API}/alugueis/alugar/${id}`, {
       method: "POST",
-      headers: getAuthHeaders(),
+      headers: cabecalhosDeAutenticacao(),
     });
-    return await res.json();
+    return await resposta.json();
   } catch {
-    return { message: "Erro de conexão com o servidor", error: "network" };
+    return { mensagem: "Erro de conexão com o servidor", erro: "rede" };
   }
 }
 
 /** Alugueis do usuario logado, incluindo os ja devolvidos ou vencidos. */
 export async function getMeusAlugueis(): Promise<Emprestimo[]> {
   try {
-    const res = await fetch(`${API_BASE}/alugueis/meus`, {
-      headers: getAuthHeaders(),
+    const resposta = await fetch(`${BASE_API}/alugueis/meus`, {
+      headers: cabecalhosDeAutenticacao(),
       cache: "no-store",
     });
-    if (!res.ok) throw new Error(`Erro ${res.status}`);
-    return await res.json();
+    if (!resposta.ok) throw new Error(`Erro ${resposta.status}`);
+    return await resposta.json();
   } catch {
     return [];
   }
 }
 
-export async function devolverAluguel(id: number): Promise<AluguelResponse> {
+export async function devolverAluguel(id: number): Promise<RespostaAluguel> {
   try {
-    const res = await fetch(`${API_BASE}/alugueis/${id}/devolver`, {
+    const resposta = await fetch(`${BASE_API}/alugueis/${id}/devolver`, {
       method: "POST",
-      headers: getAuthHeaders(),
+      headers: cabecalhosDeAutenticacao(),
     });
-    return await res.json();
+    return await resposta.json();
   } catch {
-    return { message: "Erro de conexão com o servidor", error: "network" };
+    return { mensagem: "Erro de conexão com o servidor", erro: "rede" };
+  }
+}
+
+export type Avaliacao = {
+  id: number;
+  usuarioId: number;
+  livroId: number;
+  nota: number;
+  comentario: string | null;
+  criadoEm: string;
+  atualizadoEm: string;
+  livro: {
+    id: number;
+    titulo: string;
+    autor: string;
+    editora: string;
+  };
+};
+
+export type RespostaAvaliacao = {
+  mensagem: string;
+  data?: Avaliacao;
+  erro?: string;
+};
+
+/** Registra a nota. Chamar de novo substitui a nota anterior do mesmo titulo. */
+export async function avaliarLivro(
+  livroId: number,
+  nota: number,
+  comentario?: string,
+): Promise<RespostaAvaliacao> {
+  try {
+    const resposta = await fetch(`${BASE_API}/avaliacoes`, {
+      method: "POST",
+      headers: cabecalhosDeAutenticacao(),
+      body: JSON.stringify({ livroId, nota, comentario }),
+    });
+    return await resposta.json();
+  } catch {
+    return { mensagem: "Erro de conexão com o servidor", erro: "rede" };
+  }
+}
+
+/**
+ * Avaliacoes do usuario e a lista de titulos que ele pode avaliar.
+ *
+ * Vem num endpoint so porque a tela precisa dos dois: os ids dizem onde o
+ * formulario de nota aparece e as avaliacoes preenchem as estrelas ja dadas.
+ */
+export async function getMinhasAvaliacoes(): Promise<{
+  idsLivrosAvaliaveis: number[];
+  avaliacoes: Avaliacao[];
+}> {
+  const vazio = { idsLivrosAvaliaveis: [], avaliacoes: [] };
+  try {
+    const resposta = await fetch(`${BASE_API}/avaliacoes/livros-avaliaveis`, {
+      headers: cabecalhosDeAutenticacao(),
+      cache: "no-store",
+    });
+    if (!resposta.ok) return vazio;
+    return await resposta.json();
+  } catch {
+    return vazio;
+  }
+}
+
+/** Avaliacao publica de um livro, com o nome de quem deixou a nota. */
+export type AvaliacaoPublica = {
+  id: number;
+  nota: number;
+  comentario: string | null;
+  criadoEm: string;
+  atualizadoEm: string;
+  usuario: { nomeUsuario: string };
+};
+
+/**
+ * Opnioes da equipe sobre um livro. Nao exige login, por isso usa BASE_API
+ * direto e sem o header de autenticacao.
+ */
+export async function listarAvaliacoesDoLivro(
+  livroId: number,
+): Promise<AvaliacaoPublica[]> {
+  try {
+    const resposta = await fetch(`${BASE_API}/avaliacoes/livro/${livroId}`, {
+      cache: "no-store",
+    });
+    if (!resposta.ok) return [];
+    return await resposta.json();
+  } catch {
+    return [];
   }
 }

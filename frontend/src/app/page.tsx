@@ -2,20 +2,23 @@
 
 import { BookX } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BookCard } from "@/components/library/book-card";
-import { BookDetailDialog } from "@/components/library/book-detail-dialog";
+import { CartaoLivro } from "@/components/library/book-card";
+import { DialogoDetalheLivro } from "@/components/library/book-detail-dialog";
 import {
-  FilterPanel,
-  type SortOption,
+  type OpcaoOrdenacao,
+  PainelFiltros,
 } from "@/components/library/filter-panel";
-import { Header } from "@/components/library/header";
+import { Cabecalho } from "@/components/library/header";
 import {
-  type Book,
-  type Emprestimo,
+  type Avaliacao,
+  alugarLivro as alugarLivroNaApi,
+  avaliarLivro as avaliarLivroNaApi,
   devolverAluguel,
-  getBooks,
+  type Emprestimo,
   getMeusAlugueis,
-  rentBook as rentBookApi,
+  getMinhasAvaliacoes,
+  type Livro,
+  listarLivros,
 } from "@/lib/api";
 import {
   gravarFavoritos,
@@ -24,201 +27,254 @@ import {
 } from "@/lib/favorites";
 import { cn } from "@/lib/utils";
 
-export default function Page() {
-  const [books, setBooks] = useState<Book[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [query, setQuery] = useState("");
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [availableOnly, setAvailableOnly] = useState(false);
-  const [minRating, setMinRating] = useState(0);
-  const [sort, setSort] = useState<SortOption>("relevancia");
-  const [favorites, setFavorites] = useState<string[]>([]);
-  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-  const [selectedBook, setSelectedBook] = useState<Book | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [rentingId, setRentingId] = useState<string | null>(null);
+export default function Pagina() {
+  const [livros, setLivros] = useState<Livro[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [busca, setBusca] = useState("");
+  const [categoriasSelecionadas, setCategoriasSelecionadas] = useState<
+    string[]
+  >([]);
+  const [somenteDisponiveis, setSomenteDisponiveis] = useState(false);
+  const [notaMinima, setNotaMinima] = useState(0);
+  const [ordenacao, setOrdenacao] = useState<OpcaoOrdenacao>("relevancia");
+  const [favoritos, setFavoritos] = useState<string[]>([]);
+  const [mostrarSomenteFavoritos, setMostrarSomenteFavoritos] = useState(false);
+  const [livroSelecionado, setLivroSelecionado] = useState<Livro | null>(null);
+  const [detalheAberto, setDetalheAberto] = useState(false);
+  const [alugandoId, setAlugandoId] = useState<string | null>(null);
   const [alugueis, setAlugueis] = useState<Emprestimo[]>([]);
   const [carregandoAlugueis, setCarregandoAlugueis] = useState(false);
   const [devolvendoId, setDevolvendoId] = useState<number | null>(null);
-  const [message, setMessage] = useState<{
+  const [avaliacoes, setAvaliacoes] = useState<Avaliacao[]>([]);
+  const [idsLivrosAvaliaveis, setIdsLivrosAvaliaveis] = useState<number[]>([]);
+  const [enviandoAvaliacao, setEnviandoAvaliacao] = useState(false);
+  const [aviso, setAviso] = useState<{
     tipo: "sucesso" | "erro";
     texto: string;
   } | null>(null);
 
   // Carrega os favoritos do usuario logado ao abrir a pagina.
   useEffect(() => {
-    setFavorites(lerFavoritos(usuarioAtualEmail()));
+    setFavoritos(lerFavoritos(usuarioAtualEmail()));
   }, []);
 
   // Persiste a cada mudanca, inclusive quando o usuario troca de conta.
   useEffect(() => {
-    gravarFavoritos(usuarioAtualEmail(), favorites);
-  }, [favorites]);
+    gravarFavoritos(usuarioAtualEmail(), favoritos);
+  }, [favoritos]);
 
   useEffect(() => {
-    getBooks().then((data) => {
-      setBooks(data);
-      setLoading(false);
+    listarLivros().then((dados) => {
+      setLivros(dados);
+      setCarregando(false);
     });
   }, []);
 
-  const categories = useMemo(() => {
-    const unique = new Set(books.map((b) => b.category));
-    return Array.from(unique).sort();
-  }, [books]);
+  const categorias = useMemo(() => {
+    const unicas = new Set(livros.map((l) => l.categoria));
+    return Array.from(unicas).sort();
+  }, [livros]);
 
-  const openBook = (book: Book) => {
-    setSelectedBook(book);
-    setDetailOpen(true);
+  const abrirLivro = (livro: Livro) => {
+    setLivroSelecionado(livro);
+    setDetalheAberto(true);
   };
 
   // Recarrega a lista para refletir a nova quantidade disponivel.
-  const refreshBooks = useCallback(async () => {
-    const data = await getBooks();
-    setBooks(data);
+  const recarregarLivros = useCallback(async () => {
+    const dados = await listarLivros();
+    setLivros(dados);
   }, []);
 
   // Só há aluguel para quem está logado. Sem token a API responde 401 e o
   // catch do getMeusAlugueis devolve lista vazia, então não há erro visível.
-  const refreshAlugueis = useCallback(async () => {
+  const recarregarAlugueis = useCallback(async () => {
     if (!usuarioAtualEmail()) {
       setAlugueis([]);
       return;
     }
     setCarregandoAlugueis(true);
-    const data = await getMeusAlugueis();
-    setAlugueis(data);
+    const dados = await getMeusAlugueis();
+    setAlugueis(dados);
     setCarregandoAlugueis(false);
   }, []);
 
+  // Títulos que o usuário já alugou, em qualquer situação. É o que mantém a
+  // avaliação disponível mesmo depois de devolver o exemplar.
+  const recarregarAvaliacoes = useCallback(async () => {
+    if (!usuarioAtualEmail()) {
+      setAvaliacoes([]);
+      setIdsLivrosAvaliaveis([]);
+      return;
+    }
+    const { idsLivrosAvaliaveis: ids, avaliacoes: notas } =
+      await getMinhasAvaliacoes();
+    setIdsLivrosAvaliaveis(ids);
+    setAvaliacoes(notas);
+  }, []);
+
   useEffect(() => {
-    refreshAlugueis();
-  }, [refreshAlugueis]);
+    recarregarAlugueis();
+    recarregarAvaliacoes();
+  }, [recarregarAlugueis, recarregarAvaliacoes]);
 
-  // Livros que este usuario ja tem alugados e nao devolveu. O card usa isso
-  // para nao oferecer de novo um exemplar que ele ja esta com o emprestado.
-  const livrosAlugados = useMemo(
-    () =>
-      new Set(
-        alugueis
-          .filter((a) => a.status === "ATIVO")
-          .map((a) => String(a.livroId)),
-      ),
-    [alugueis],
-  );
+  /** Registro do usuário para um livro, se ele já deu nota. */
+  const avaliacaoPorLivro = useMemo(() => {
+    const mapa = new Map<number, Avaliacao>();
+    for (const avaliacao of avaliacoes) {
+      mapa.set(avaliacao.livroId, avaliacao);
+    }
+    return mapa;
+  }, [avaliacoes]);
 
-  const rentBook = async (book: Book) => {
-    setRentingId(book.id);
+  const avaliar = async (idLivro: number, nota: number, comentario: string) => {
+    setEnviandoAvaliacao(true);
     try {
-      const result = await rentBookApi(Number(book.id));
+      const resultado = await avaliarLivroNaApi(idLivro, nota, comentario);
 
-      // precisa recarregar os dois lados: o estoque do livro e a lista do topo
-      await Promise.all([refreshBooks(), refreshAlugueis()]);
+      // A nota altera a média do livro, então o card precisa da lista nova.
+      await Promise.all([recarregarLivros(), recarregarAvaliacoes()]);
 
-      if (result.error) {
-        setMessage({ tipo: "erro", texto: result.message });
+      setAviso({
+        tipo: resultado.erro ? "erro" : "sucesso",
+        texto: resultado.mensagem,
+      });
+
+      if (!resultado.erro) {
+        setLivroSelecionado(null);
+        setDetalheAberto(false);
+      }
+    } finally {
+      setEnviandoAvaliacao(false);
+    }
+  };
+
+  const alugarLivro = async (livro: Livro) => {
+    setAlugandoId(livro.id);
+    try {
+      const resultado = await alugarLivroNaApi(Number(livro.id));
+
+      // precisa recarregar os três lados: o estoque do livro, a lista do topo
+      // e a lista de títulos avaliáveis, que acabou de ganhar este livro
+      await Promise.all([
+        recarregarLivros(),
+        recarregarAlugueis(),
+        recarregarAvaliacoes(),
+      ]);
+
+      if (resultado.erro) {
+        setAviso({ tipo: "erro", texto: resultado.mensagem });
         return;
       }
 
-      const prazo = result.data?.prazoDevolucao
-        ? new Date(result.data.prazoDevolucao).toLocaleDateString("pt-BR")
+      const prazo = resultado.data?.prazoDevolucao
+        ? new Date(resultado.data.prazoDevolucao).toLocaleDateString("pt-BR")
         : null;
 
-      setMessage({
+      setAviso({
         tipo: "sucesso",
-        texto: `"${book.title}" alugado. Restam ${result.disponiveis} cópia(s).${
+        texto: `"${livro.titulo}" alugado. Restam ${resultado.disponiveis} cópia(s).${
           prazo ? ` Devolva até ${prazo}.` : ""
         }`,
       });
 
-      setSelectedBook(null);
-      setDetailOpen(false);
+      setLivroSelecionado(null);
+      setDetalheAberto(false);
     } finally {
-      setRentingId(null);
+      setAlugandoId(null);
     }
   };
 
-  const devolver = async (emprestimoId: number) => {
-    setDevolvendoId(emprestimoId);
+  const devolver = async (idEmprestimo: number) => {
+    setDevolvendoId(idEmprestimo);
     try {
-      const result = await devolverAluguel(emprestimoId);
+      const resultado = await devolverAluguel(idEmprestimo);
 
-      // o estoque volta a crescer, entao os dois lados mudam de novo
-      await Promise.all([refreshBooks(), refreshAlugueis()]);
+      // o estoque volta a crescer, entao os três lados mudam de novo
+      await Promise.all([
+        recarregarLivros(),
+        recarregarAlugueis(),
+        recarregarAvaliacoes(),
+      ]);
 
-      setMessage({
-        tipo: result.error ? "erro" : "sucesso",
-        texto: result.error
-          ? result.message
-          : `${result.message} Exemplar disponível novamente.`,
+      setAviso({
+        tipo: resultado.erro ? "erro" : "sucesso",
+        texto: resultado.erro
+          ? resultado.mensagem
+          : `${resultado.mensagem} Exemplar disponível novamente.`,
       });
     } finally {
       setDevolvendoId(null);
     }
   };
 
-  const toggleCategory = (category: string) =>
-    setSelectedCategories((prev) =>
-      prev.includes(category)
-        ? prev.filter((c) => c !== category)
-        : [...prev, category],
+  const alternarCategoria = (categoria: string) =>
+    setCategoriasSelecionadas((anterior) =>
+      anterior.includes(categoria)
+        ? anterior.filter((c) => c !== categoria)
+        : [...anterior, categoria],
     );
 
-  const toggleFavorite = (id: string) =>
-    setFavorites((prev) =>
-      prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id],
+  const alternarFavorito = (id: string) =>
+    setFavoritos((anterior) =>
+      anterior.includes(id)
+        ? anterior.filter((f) => f !== id)
+        : [...anterior, id],
     );
 
-  const resetFilters = () => {
-    setSelectedCategories([]);
-    setAvailableOnly(false);
-    setMinRating(0);
-    setSort("relevancia");
-    setQuery("");
-    setShowFavoritesOnly(false);
+  const limparFiltros = () => {
+    setBusca("");
+    setCategoriasSelecionadas([]);
+    setSomenteDisponiveis(false);
+    setNotaMinima(0);
+    setOrdenacao("relevancia");
+    setMostrarSomenteFavoritos(false);
   };
 
-  const filteredBooks = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const result = books.filter((book) => {
-      if (showFavoritesOnly && !favorites.includes(book.id)) return false;
-      if (q && !`${book.title} ${book.author}`.toLowerCase().includes(q))
+  const livrosFiltrados = useMemo(() => {
+    const termo = busca.toLowerCase();
+    let resultado = livros.filter((l) => {
+      if (termo && !`${l.titulo} ${l.autor}`.toLowerCase().includes(termo))
         return false;
-      if (
-        selectedCategories.length &&
-        !selectedCategories.includes(book.category)
-      )
-        return false;
-      if (availableOnly && !book.available) return false;
-      if (book.rating < minRating) return false;
+      if (categoriasSelecionadas.length > 0)
+        return categoriasSelecionadas.includes(l.categoria);
+      // Guarda contra notaMinima ser undefined: a comparação com undefined
+      // daria false e o filtro nunca cortaria nada.
+      if (notaMinima > 0 && l.nota < notaMinima) return false;
       return true;
     });
 
-    const sorted = [...result];
-    switch (sort) {
+    if (somenteDisponiveis) resultado = resultado.filter((l) => l.disponivel);
+    if (mostrarSomenteFavoritos)
+      resultado = resultado.filter((l) => favoritos.includes(l.id));
+
+    const ordenados = [...resultado];
+    switch (ordenacao) {
       case "avaliacao":
-        sorted.sort((a, b) => b.rating - a.rating);
-        break;
-      case "recentes":
-        sorted.sort((a, b) => b.year - a.year);
+        ordenados.sort((a, b) => b.nota - a.nota);
         break;
       case "titulo":
-        sorted.sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
+        ordenados.sort((a, b) => a.titulo.localeCompare(b.titulo, "pt-BR"));
+        break;
+      case "recentes":
+        ordenados.sort((a, b) => b.ano - a.ano);
+        break;
+      default:
         break;
     }
-    return sorted;
+    return ordenados;
   }, [
-    query,
-    selectedCategories,
-    availableOnly,
-    minRating,
-    sort,
-    showFavoritesOnly,
-    favorites,
-    books,
+    busca,
+    categoriasSelecionadas,
+    somenteDisponiveis,
+    mostrarSomenteFavoritos,
+    favoritos,
+    notaMinima,
+    ordenacao,
+    livros,
   ]);
 
-  if (loading) {
+  if (carregando) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-muted-foreground">Carregando acervo...</p>
@@ -228,44 +284,46 @@ export default function Page() {
 
   return (
     <div className="min-h-screen">
-      <Header
-        query={query}
-        onQueryChange={setQuery}
-        favoritesCount={favorites.length}
-        showFavoritesOnly={showFavoritesOnly}
-        onToggleFavorites={() => setShowFavoritesOnly((v) => !v)}
+      <Cabecalho
+        busca={busca}
+        aoMudarBusca={setBusca}
+        quantidadeFavoritos={favoritos.length}
+        mostrarSomenteFavoritos={mostrarSomenteFavoritos}
+        aoAlternarFavoritos={() => setMostrarSomenteFavoritos((v) => !v)}
         alugueis={alugueis}
         carregandoAlugueis={carregandoAlugueis}
         devolvendoId={devolvendoId}
-        onDevolver={devolver}
+        aoDevolver={devolver}
       />
 
       <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        {message && (
-          <div
-            role="status"
+        {aviso && (
+          // <output> ja carrega role="status", e o biome sinaliza o div com
+          // role="status" como uso incorreto de papel.
+          <output
             className={cn(
               "mb-6 flex items-center justify-between gap-4 rounded-xl border px-4 py-3 text-sm",
-              message.tipo === "sucesso"
+              aviso.tipo === "sucesso"
                 ? "border-gold/40 bg-gold/10 text-foreground"
                 : "border-destructive/40 bg-destructive/10 text-foreground",
             )}
           >
-            <span>{message.texto}</span>
+            <span>{aviso.texto}</span>
             <button
               type="button"
-              onClick={() => setMessage(null)}
+              onClick={() => setAviso(null)}
               className="shrink-0 text-xs text-muted-foreground hover:text-foreground"
             >
               Fechar
             </button>
-          </div>
+          </output>
         )}
-        {/* Hero */}
+        {/* Apresentação */}
         <section className="mb-10 max-w-2xl">
           <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
             <span className="size-1.5 rounded-full bg-gold" />
-            {books.filter((b) => b.available).length} títulos disponíveis agora
+            {livros.filter((l) => l.disponivel).length} títulos disponíveis
+            agora
           </span>
           <h1 className="mt-4 text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
             Descubra seu próximo livro no acervo da equipe
@@ -278,35 +336,36 @@ export default function Page() {
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[260px_1fr]">
           <div className="lg:top-24 lg:self-start">
-            <FilterPanel
-              categories={categories}
-              selectedCategories={selectedCategories}
-              onToggleCategory={toggleCategory}
-              availableOnly={availableOnly}
-              onAvailableOnlyChange={setAvailableOnly}
-              minRating={minRating}
-              onMinRatingChange={setMinRating}
-              sort={sort}
-              onSortChange={setSort}
-              onReset={resetFilters}
-              resultCount={filteredBooks.length}
+            <PainelFiltros
+              categorias={categorias}
+              categoriasSelecionadas={categoriasSelecionadas}
+              aoAlternarCategoria={alternarCategoria}
+              somenteDisponiveis={somenteDisponiveis}
+              aoMudarSomenteDisponiveis={setSomenteDisponiveis}
+              notaMinima={notaMinima}
+              aoMudarNotaMinima={setNotaMinima}
+              ordenacao={ordenacao}
+              aoMudarOrdenacao={setOrdenacao}
+              aoLimpar={limparFiltros}
+              quantidadeResultados={livrosFiltrados.length}
             />
           </div>
 
           <div>
-            {filteredBooks.length > 0 ? (
+            {livrosFiltrados.length > 0 ? (
               <div className="grid grid-cols-2 gap-5 md:grid-cols-3 xl:grid-cols-4">
-                {filteredBooks.map((book, index) => (
-                  <BookCard
-                    key={book.id}
-                    book={book}
-                    index={index}
-                    isFavorite={favorites.includes(book.id)}
-                    onToggleFavorite={toggleFavorite}
-                    onOpen={openBook}
-                    onRent={rentBook}
-                    renting={rentingId === book.id}
-                    jaAlugou={livrosAlugados.has(book.id)}
+                {livrosFiltrados.map((livro, indice) => (
+                  <CartaoLivro
+                    key={livro.id}
+                    livro={livro}
+                    indice={indice}
+                    favorito={favoritos.includes(livro.id)}
+                    aoAlternarFavorito={alternarFavorito}
+                    aoAbrir={abrirLivro}
+                    aoAlugar={alugarLivro}
+                    alugando={alugandoId === livro.id}
+                    podeAvaliar={idsLivrosAvaliaveis.includes(Number(livro.id))}
+                    jaAvaliou={avaliacaoPorLivro.has(Number(livro.id))}
                   />
                 ))}
               </div>
@@ -321,7 +380,7 @@ export default function Page() {
                 </p>
                 <button
                   type="button"
-                  onClick={resetFilters}
+                  onClick={limparFiltros}
                   className="mt-5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
                 >
                   Limpar filtros
@@ -332,15 +391,29 @@ export default function Page() {
         </div>
       </main>
 
-      <BookDetailDialog
-        book={selectedBook}
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-        isFavorite={selectedBook ? favorites.includes(selectedBook.id) : false}
-        onToggleFavorite={toggleFavorite}
-        onRent={rentBook}
-        renting={rentingId === selectedBook?.id}
-        jaAlugou={selectedBook ? livrosAlugados.has(selectedBook.id) : false}
+      <DialogoDetalheLivro
+        livro={livroSelecionado}
+        aberto={detalheAberto}
+        aoMudarAbertura={setDetalheAberto}
+        favorito={
+          livroSelecionado ? favoritos.includes(livroSelecionado.id) : false
+        }
+        aoAlternarFavorito={alternarFavorito}
+        aoAlugar={alugarLivro}
+        alugando={alugandoId === livroSelecionado?.id}
+        podeAvaliar={
+          livroSelecionado
+            ? idsLivrosAvaliaveis.includes(Number(livroSelecionado.id))
+            : false
+        }
+        avaliacaoExistente={
+          livroSelecionado
+            ? (avaliacaoPorLivro.get(Number(livroSelecionado.id)) ?? null)
+            : null
+        }
+        notaMedia={livroSelecionado?.nota ?? null}
+        aoAvaliar={avaliar}
+        enviandoAvaliacao={enviandoAvaliacao}
       />
     </div>
   );

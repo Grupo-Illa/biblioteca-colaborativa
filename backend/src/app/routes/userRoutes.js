@@ -1,13 +1,13 @@
 import express from 'express';
-import userController from "../controller/userController.js";
+import UsuarioController from "../controller/userController.js";
 
-const userRoutes = express.Router();
-const controller = new userController;
+const rotasUsuario = express.Router();
+const controller = new UsuarioController();
 
-userRoutes.post('/cadastrar', controller.createController);
-userRoutes.post('/login', controller.loginController);
-userRoutes.get('/buscarTodos', controller.showController);
-userRoutes.patch('/atualizarUsuario/:id', controller.updateController);
-userRoutes.delete('/deletarUsuario/:id', controller.deleteController);
+rotasUsuario.post('/cadastrar', controller.criarController);
+rotasUsuario.post('/login', controller.loginController);
+rotasUsuario.get('/buscarTodos', controller.listarController);
+rotasUsuario.patch('/atualizarUsuario/:id', controller.atualizarController);
+rotasUsuario.delete('/deletarUsuario/:id', controller.deletarController);
 
-export default userRoutes;
+export default rotasUsuario;
