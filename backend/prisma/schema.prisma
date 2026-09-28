@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -16,16 +17,67 @@ enum StatusAluguel {
   ALUGADO
 }
 
+enum StatusReserva {
+  ATIVA
+  CANCELADA
+}
+
 model Livro {
   id                Int           @id @default(autoincrement())
   titulo            String        @db.VarChar(255)
   autor             String        @db.VarChar(255)
   dataLancamento    DateTime      @db.Date
   editora           String        @db.VarChar(255)
+  // Faceta usada nos filtros da home. A editora continua existindo como
+  // atributo do livro, mas quem agrupa a listagem é a categoria.
+  categoria        String        @db.VarChar(120) @default("Geral")
+  // URL da capa. Nulo significa "usar a imagem padrão da interface".
+  capa              String?       @db.VarChar(500)
   statusAluguel     StatusAluguel @default(DISPONIVEL)
+  // Quem está com o livro e desde quando. Preenchidos só quando
+  // statusAluguel = ALUGADO, e limpos na devolução.
+  alugadoPor        String?       @db.VarChar(255)
+  alugadoEm         DateTime?
   quantidadeAlugada Int           @default(0)
+  // Nota media e quantas avaliações o livro tem. Calculados pelo banco,
+  // não guardados: evita média desatualizada quando uma nota muda.
+  mediaNotas        Float         @default(0)
+  totalAvaliacoes   Int           @default(0)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
+
+  avaliacoes Avaliacao[]
+  reservas   Reserva[]
+}
+
+/// Uma avaliação por usuário por livro. `@@unique` faz o upsert ser
+/// possible no banco em vez de depender de checar-e-depois-inserir na aplicação.
+model Avaliacao {
+  id         Int      @id @default(autoincrement())
+  livroId    Int
+  livro      Livro    @relation(fields: [livroId], references: [id], onDelete: Cascade)
+  userEmail  String   @db.VarChar(255)
+  nota       Int
+  comentario String?  @db.VarChar(1000)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([livroId, userEmail])
+  @@index([livroId])
+}
+
+/// Fila de quem quer o livro quando ele está alugado.
+/// A posição é derivada de createdAt, então não existe contador para dessincronizar.
+model Reserva {
+  id        Int           @id @default(autoincrement())
+  livroId   Int
+  livro     Livro         @relation(fields: [livroId], references: [id], onDelete: Cascade)
+  userEmail String        @db.VarChar(255)
+  status    StatusReserva @default(ATIVA)
+  createdAt DateTime      @default(now())
+
+  @@unique([livroId, userEmail])
+  @@index([livroId, status])
 }
 
 model User {

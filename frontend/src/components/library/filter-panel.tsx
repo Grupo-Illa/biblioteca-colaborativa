@@ -3,10 +3,18 @@
 import { RotateCcw, SlidersHorizontal } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 export type SortOption = "relevancia" | "avaliacao" | "recentes" | "titulo";
+
+/** "todos" não filtra nada; os outros dois exigem o status correspondente. */
+export type AvailabilityFilter = "todos" | "disponiveis" | "indisponiveis";
+
+const availabilityOptions: { value: AvailabilityFilter; label: string }[] = [
+  { value: "todos", label: "Todos" },
+  { value: "disponiveis", label: "Disponíveis" },
+  { value: "indisponiveis", label: "Indisponíveis" },
+];
 
 const sortOptions: { value: SortOption; label: string }[] = [
   { value: "relevancia", label: "Relevância" },
@@ -18,8 +26,8 @@ const sortOptions: { value: SortOption; label: string }[] = [
 type FilterPanelProps = {
   selectedCategories: string[];
   onToggleCategory: (category: string) => void;
-  availableOnly: boolean;
-  onAvailableOnlyChange: (value: boolean) => void;
+  availability: AvailabilityFilter;
+  onAvailabilityChange: (value: AvailabilityFilter) => void;
   minRating: number;
   onMinRatingChange: (value: number) => void;
   sort: SortOption;
@@ -32,8 +40,8 @@ type FilterPanelProps = {
 export function FilterPanel({
   selectedCategories,
   onToggleCategory,
-  availableOnly,
-  onAvailableOnlyChange,
+  availability,
+  onAvailabilityChange,
   minRating,
   onMinRatingChange,
   sort,
@@ -135,22 +143,44 @@ export function FilterPanel({
           min={0}
           max={5}
           step={0.5}
-          onValueChange={(v) => onMinRatingChange(v[0])}
+          onValueChange={(v) => {
+            // O Radix entrega number | number[]; normalizamos os dois casos.
+            const bruto = Array.isArray(v) ? v[0] : v;
+            onMinRatingChange(typeof bruto === "number" ? bruto : 0);
+          }}
           aria-label="Avaliação mínima"
         />
       </div>
 
       <div className="h-px bg-border" />
 
-      {/* Disponibilidade */}
-      <label className="flex cursor-pointer items-center justify-between">
-        <span className="text-sm">Somente disponíveis</span>
-        <Switch
-          checked={availableOnly}
-          onCheckedChange={onAvailableOnlyChange}
-          aria-label="Mostrar somente livros disponíveis"
-        />
-      </label>
+      {/* Disponibilidade: Todos / Disponíveis / Indisponíveis */}
+      <fieldset className="space-y-2.5">
+        <legend className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Disponibilidade
+        </legend>
+        <div className="flex rounded-lg border border-border bg-secondary/50 p-1">
+          {availabilityOptions.map((option) => {
+            const selected = availability === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => onAvailabilityChange(option.value)}
+                aria-pressed={selected}
+                className={cn(
+                  "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-all",
+                  selected
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
 
       <div className="rounded-lg bg-secondary/50 px-3 py-2.5 text-center text-xs text-muted-foreground">
         <span className="font-mono font-semibold text-foreground">
