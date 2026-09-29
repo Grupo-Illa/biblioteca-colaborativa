@@ -1,44 +1,53 @@
-"use client"
+﻿"use client";
 
-import { useEffect, useState } from "react"
-import { BookOpen, Heart, Search, LogIn, User, Library } from "lucide-react"
-import { ThemeToggle } from "@/components/library/theme-toggle"
-import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
-import type { User as UserType } from "@/lib/api"
-import { AdminBookModal } from "@/components/library/admin-book-modal"
+import { BookOpen, Heart, Library, LogIn, Search, User } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ModalAcervo } from "@/components/library/admin-book-modal";
+import { MeusAlugueis } from "@/components/library/meus-alugueis";
+import { AlternadorTema } from "@/components/library/theme-toggle";
+import { Input } from "@/components/ui/input";
+import type { Emprestimo, Usuario as UsuarioType } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
-type HeaderProps = {
-  query: string
-  onQueryChange: (value: string) => void
-  favoritesCount: number
-  showFavoritesOnly: boolean
-  onToggleFavorites: () => void
-}
+type PropsCabecalho = {
+  busca: string;
+  aoMudarBusca: (valor: string) => void;
+  quantidadeFavoritos: number;
+  mostrarSomenteFavoritos: boolean;
+  aoAlternarFavoritos: () => void;
+  alugueis: Emprestimo[];
+  carregandoAlugueis: boolean;
+  devolvendoId: number | null;
+  aoDevolver: (idEmprestimo: number) => void;
+};
 
-export function Header({
-  query,
-  onQueryChange,
-  favoritesCount,
-  showFavoritesOnly,
-  onToggleFavorites,
-}: HeaderProps) {
-  const [currentUser, setCurrentUser] = useState<UserType | null>(null)
-  const [adminModalOpen, setAdminModalOpen] = useState(false)
+export function Cabecalho({
+  busca,
+  aoMudarBusca,
+  quantidadeFavoritos,
+  mostrarSomenteFavoritos,
+  aoAlternarFavoritos,
+  alugueis,
+  carregandoAlugueis,
+  devolvendoId,
+  aoDevolver,
+}: PropsCabecalho) {
+  const [usuarioAtual, setUsuarioAtual] = useState<UsuarioType | null>(null);
+  const [modalAberto, setModalAberto] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem("acervo-user")
-    if (stored) {
+    const guardado = localStorage.getItem("acervo-usuario");
+    if (guardado) {
       try {
-        setCurrentUser(JSON.parse(stored))
+        setUsuarioAtual(JSON.parse(guardado));
       } catch {}
     }
-  }, [])
+  }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem("acervo-user")
-    setCurrentUser(null)
-  }
+  const sair = () => {
+    localStorage.removeItem("acervo-usuario");
+    setUsuarioAtual(null);
+  };
 
   return (
     <>
@@ -49,17 +58,21 @@ export function Header({
               <BookOpen className="size-5" />
             </span>
             <div className="leading-none">
-              <p className="font-mono text-sm font-semibold tracking-tight">Acervo</p>
-              <p className="hidden text-[11px] text-muted-foreground sm:block">Biblioteca interna</p>
+              <p className="font-mono text-sm font-semibold tracking-tight">
+                Acervo
+              </p>
+              <p className="hidden text-[11px] text-muted-foreground sm:block">
+                Biblioteca interna
+              </p>
             </div>
           </a>
 
           <div className="relative ml-auto flex-1 sm:max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              value={query}
-              onChange={(e) => onQueryChange(e.target.value)}
-              placeholder="Buscar por título ou autor..."
+              value={busca}
+              onChange={(e) => aoMudarBusca(e.target.value)}
+              placeholder="Buscar por tÃ­tulo ou autor..."
               aria-label="Buscar livros"
               className="h-10 rounded-full border-border bg-secondary/60 pl-9 pr-4 focus-visible:ring-gold/40"
             />
@@ -67,40 +80,55 @@ export function Header({
 
           <button
             type="button"
-            onClick={onToggleFavorites}
-            aria-pressed={showFavoritesOnly}
+            onClick={aoAlternarFavoritos}
+            aria-pressed={mostrarSomenteFavoritos}
             className={cn(
               "relative inline-flex h-10 items-center gap-2 rounded-full border px-3 text-sm font-medium transition-all",
-              showFavoritesOnly
+              mostrarSomenteFavoritos
                 ? "border-gold/60 bg-gold/10 text-foreground"
                 : "border-border bg-secondary/60 text-muted-foreground hover:text-foreground",
             )}
           >
             <Heart
-              className={cn("size-4 transition-colors", showFavoritesOnly && "fill-gold text-gold")}
+              className={cn(
+                "size-4 transition-colors",
+                mostrarSomenteFavoritos && "fill-gold text-gold",
+              )}
             />
             <span className="hidden sm:inline">Favoritos</span>
-            {favoritesCount > 0 && (
+            {quantidadeFavoritos > 0 && (
               <span className="flex min-w-5 items-center justify-center rounded-full bg-gold px-1.5 text-[11px] font-semibold text-gold-foreground">
-                {favoritesCount}
+                {quantidadeFavoritos}
               </span>
             )}
           </button>
+          {/* Fica junto dos demais controles do topo, visivel so para quem
+              esta logado, porque lista algueis e pessoal. */}
+          {usuarioAtual && (
+            <MeusAlugueis
+              alugueis={alugueis}
+              carregando={carregandoAlugueis}
+              devolvendoId={devolvendoId}
+              aoDevolver={aoDevolver}
+            />
+          )}
 
-          {currentUser ? (
+          {usuarioAtual ? (
             <div className="group relative">
               <button
                 type="button"
                 className="inline-flex h-10 items-center gap-2 rounded-full border border-border bg-secondary/60 px-3 text-sm font-medium text-muted-foreground transition-all hover:text-foreground"
               >
                 <User className="size-4" />
-                <span className="hidden sm:inline max-w-24 truncate">{currentUser.username}</span>
+                <span className="hidden sm:inline max-w-24 truncate">
+                  {usuarioAtual.nomeUsuario}
+                </span>
               </button>
               <div className="absolute right-0 top-full mt-2 w-48 origin-top-right scale-95 rounded-xl border border-border bg-popover p-1 opacity-0 shadow-lg transition-all group-hover:scale-100 group-hover:opacity-100">
-                {currentUser.role === "ADMIN" && (
+                {usuarioAtual.perfil === "ADMIN" && (
                   <button
                     type="button"
-                    onClick={() => setAdminModalOpen(true)}
+                    onClick={() => setModalAberto(true)}
                     className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                   >
                     <Library className="size-4" />
@@ -109,7 +137,7 @@ export function Header({
                 )}
                 <button
                   type="button"
-                  onClick={handleLogout}
+                  onClick={sair}
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                 >
                   Sair
@@ -126,11 +154,11 @@ export function Header({
             </a>
           )}
 
-          <ThemeToggle />
+          <AlternadorTema />
         </div>
       </header>
 
-      <AdminBookModal open={adminModalOpen} onOpenChange={setAdminModalOpen} />
+      <ModalAcervo aberto={modalAberto} aoMudarAbertura={setModalAberto} />
     </>
-  )
+  );
 }

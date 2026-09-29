@@ -1,98 +1,103 @@
-import instanciaPrisma from "../../connection/instance.js";
+﻿import instanciaPrisma from "../../connection/instance.js";
 import bcrypt from "bcrypt";
 
-const prisma = instanciaPrisma.getConnection();
+const prisma = instanciaPrisma.obterConexao();
 
-class userRepository{
-    async findByEmail(email) {
+class UsuarioRepository {
+    async buscarPorEmail(email) {
         try {
-            return await prisma.user.findUnique({ where: { email } });
-        } catch (error) {
-            console.log('Repository: Erro ao buscar email! ', error.message);
+            return await prisma.usuario.findUnique({ where: { email } });
+        } catch (erro) {
+            console.log('Repository: Erro ao buscar email! ', erro.message);
             return null;
         }
     }
 
-    async createUser(data) {
+    async criarUsuario(dados) {
         try {
-            const userExists = await prisma.user.findUnique({where: {email: data.email}}); //procura o usuário pra ver se ja existe
-            if (!userExists) {
-                const {username, password, email, birthday, phone} = data;
-                const hashedPassword = await bcrypt.hash(data.password, 10);
+            const usuarioExiste = await prisma.usuario.findUnique({ where: { email: dados.email } });
+            if (!usuarioExiste) {
+                const { nomeUsuario, senha, email, dataNascimento, telefone } = dados;
+                const senhaHasheada = await bcrypt.hash(senha, 10);
 
-                const create = prisma.user.create({
+                const promessaCriacao = prisma.usuario.create({
                     data: {
-                        username,
-                        password: hashedPassword,
+                        nomeUsuario,
+                        senha: senhaHasheada,
                         email,
-                        birthday: new Date(birthday),
-                        phone
+                        dataNascimento: new Date(dataNascimento),
+                        telefone
                     }
                 });
-                
-                return create
-            } else {
-                throw new Error('Repository: O email inserido já está em uso!')
+
+                return promessaCriacao;
             }
 
-        } catch (error) {
-            console.log('Repository: Erro no catch! ', error.message)
-            // throw error;
+            throw new Error('Repository: O email inserido já está em uso!');
+
+        } catch (erro) {
+            // Engolir o erro aqui devolveria undefined e o controller cairia em
+            // um TypeError, escondendo o motivo real (email duplicado, por
+            // exemplo). Propagar deixa a mensagem chegar na resposta.
+            throw erro;
         }
     }
 
-    async showAllUsers() {
+    async listarTodos() {
         try {
-            const allUser = prisma.user.findMany();
-            return allUser
-        } catch (error) {
-            console.log('Repository: Erro no cath! ', error.message)
+            const promessaListagem = prisma.usuario.findMany();
+            return promessaListagem;
+        } catch (erro) {
+            console.log('Repository: Erro ao listar usuarios! ', erro.message);
+            throw erro;
         }
     }
 
-    async updateUser(id, data) {
+    async atualizarUsuario(id, dados) {
         try {
-            const userExists = await prisma.user.findUnique({where: { id: Number(id) }}); //o Number é pra garantir que é um inteiro e não uma string
-            if (!userExists) {
-                throw new Error('Repository: ConflictError - Usuário não existe ')
-            };
+            const usuarioExiste = await prisma.usuario.findUnique({ where: { id: Number(id) } });
+            if (!usuarioExiste) {
+                throw new Error('Repository: Usuário não existe!');
+            }
 
-            const cleanData = Object.fromEntries(
-                Object.entries(data).filter(([_, value]) => value !== "" && value !== null && value !== undefined)
+            // Remove campos vazios ou nulos para não sobrescrever dados existentes
+            const dadosLimpos = Object.fromEntries(
+                Object.entries(dados).filter(([_, valor]) => valor !== "" && valor !== null && valor !== undefined)
             );
 
-            if (cleanData.password) {
-                const hashedPassword = await bcrypt.hash(cleanData.password, 10);
+            if (dadosLimpos.senha) {
+                // Antes a senha hasheada era calculada e descartada, e a senha
+                // em texto puro era gravada. Aqui o valor hasheado e o que
+                // realmente substitui a senha.
+                dadosLimpos.senha = await bcrypt.hash(dadosLimpos.senha, 10);
             }
 
-            const updateUser = prisma.user.update({
-                    where:{ id },
-                    data: cleanData
-                });
-            return updateUser
-        } catch (error) {
-            console.log('Repository: Erro ao atualizar usuário! ', error.message);
-            // throw error;
+            const promessaAtualizacao = prisma.usuario.update({
+                where: { id: Number(id) },
+                data: dadosLimpos
+            });
+            return promessaAtualizacao;
+        } catch (erro) {
+            console.log('Repository: Erro ao atualizar usuário! ', erro.message);
+            throw erro;
         }
     }
 
-
-    async deleteUser(id) {
+    async deletarUsuario(id) {
         try {
-            const userExists = await prisma.user.findUnique({where: { id: Number(id) }}); //o Number é pra garantir que é um inteiro e não uma string
-            if (!userExists) {
-                throw new Error('Repository: ConflictError - Usuário não existe ')
-            };
+            const usuarioExiste = await prisma.usuario.findUnique({ where: { id: Number(id) } });
+            if (!usuarioExiste) {
+                throw new Error('Repository: Usuário não existe!');
+            }
 
-            await prisma.user.delete({where:{ id }});
-            return {message: 'Usuário Deletado com sucesso!'}
-            
-        } catch (error) {
-            console.log('Repository: Erro ao deletar usuário! ', error);
-            // throw error
+            await prisma.usuario.delete({ where: { id: Number(id) } });
+            return { mensagem: 'Usuário Deletado com sucesso!' };
+
+        } catch (erro) {
+            console.log('Repository: Erro ao deletar usuário! ', erro);
+            throw erro;
         }
     }
-
 }
 
-export default userRepository;
+export default UsuarioRepository;

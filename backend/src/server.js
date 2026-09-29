@@ -1,23 +1,24 @@
 import express from 'express';
-import dotenv from 'dotenv';
 import cors from 'cors';
-import bookRoutes from './app/routes/bookRoutes.js';
-import userRoutes from './app/routes/userRoutes.js';
+import rotasLivros from './app/routes/bookRoutes.js';
+import rotasUsuarios from './app/routes/userRoutes.js';
+import rotasAlugueis from './app/routes/aluguelRoutes.js';
+import rotasAvaliacoes from './app/routes/avaliacaoRoutes.js';
 
-dotenv.config();
+const aplicacao = express();
+aplicacao.use(cors());
+aplicacao.use(express.json());
+aplicacao.use('/livros', rotasLivros);
+aplicacao.use('/usuarios', rotasUsuarios);
+aplicacao.use('/alugueis', rotasAlugueis);
+aplicacao.use('/avaliacoes', rotasAvaliacoes);
 
-const app = express();
-app.use(cors());
-app.use(express.json());
-app.use('/livros', bookRoutes);
-app.use('/usuarios', userRoutes);
+const PORTA = process.env.PORTA || 3000;
 
-const DOOR = process.env.DOOR || 3000;
-
-app.get('/', (req, res) => {
-    res.json({ message: 'API Biblioteca Colaborativa rodando!', versao: '2.0' });
+aplicacao.get('/', (requisicao, resposta) => {
+    resposta.json({ mensagem: 'API Biblioteca Colaborativa rodando!', versao: '2.0' });
 });
 
-app.listen(DOOR, () => {
-    console.log(`✅ Servidor rodando em: http://localhost:${DOOR}`);
+aplicacao.listen(PORTA, () => {
+    console.log(`✅ Servidor rodando em: http://localhost:${PORTA}`);
 });

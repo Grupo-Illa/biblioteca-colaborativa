@@ -1,123 +1,132 @@
-import userRepository from "../repository/userRepository.js";
+import UsuarioRepository from "../repository/userRepository.js";
 import bcrypt from "bcrypt"
 
-const {createUser, showAllUsers, updateUser, deleteUser, findByEmail} = new userRepository();
+const { criarUsuario, listarTodos, atualizarUsuario, deletarUsuario, buscarPorEmail } = new UsuarioRepository();
 
+// Mapeia a mensagem do repository para status HTTP, como no controller de livros.
+function respostaDeErro(erro, acao) {
+    const mensagem = erro?.message ?? "";
 
-class userController{
-    async loginController(req, res) {
+    if (mensagem.includes('não existe') || mensagem.includes('não encontrado')) {
+        return { status: 404, mensagem: 'Usuário não encontrado!' };
+    }
+
+    if (mensagem.includes('já está em uso')) {
+        return { status: 409, mensagem: 'O email inserido já está em uso!' };
+    }
+
+    return { status: 500, mensagem: `Erro ao ${acao}!` };
+}
+
+class UsuarioController {
+    async loginController(requisicao, resposta) {
         try {
-            const { email, password } = req.body;
-            if (!email || !password) {
-                return res.status(400).json({ message: 'Email e senha são obrigatórios!' });
+            const { email, senha } = requisicao.body;
+            if (!email || !senha) {
+                return resposta.status(400).json({ mensagem: 'Email e senha são obrigatórios!' });
             }
 
-            const user = await findByEmail(email)
-            if (!user) {
-                return res.status(401).json({ message: 'Usuário inválido!' });
+            const usuario = await buscarPorEmail(email)
+            if (!usuario) {
+                return resposta.status(401).json({ mensagem: 'Usuário inválido!' });
             }
 
-            const passwordMatch = await bcrypt.compare(password, user.password);
-            if (!passwordMatch) {
-                return res.status(401).json({ message: 'Senha incorreta!' })
+            const senhaConfere = await bcrypt.compare(senha, usuario.senha);
+            if (!senhaConfere) {
+                return resposta.status(401).json({ mensagem: 'Senha incorreta!' })
             }
 
-            const { password: _, ...userData } = user;
-            return res.status(200).json({ message: 'Login realizado com sucesso!', user: userData });
+            // A senha sai da resposta; o restante do cadastro vai junto.
+            const { senha: _, ...dadosUsuario } = usuario;
+            return resposta.status(200).json({ mensagem: 'Login realizado com sucesso!', usuario: dadosUsuario });
 
-        } catch (error) {
-            return res.status(500).json({
-                message: 'Erro ao fazer login!',
-                error: error.message
+        } catch (erro) {
+            return resposta.status(500).json({
+                mensagem: 'Erro ao fazer login!',
+                erro: erro.message
             });
         }
     }
 
-    async createController(req, res) {
+    async criarController(requisicao, resposta) {
         try {
-            const data = req.body;
-            if (data.birthday) {
-                data.birthday = new Date(data.birthday);
+            const dados = requisicao.body;
+            if (dados.dataNascimento) {
+                dados.dataNascimento = new Date(dados.dataNascimento);
             }
 
-            if (!data.username || !data.password || !data.email || !data.birthday) {
-                return res.status(400).json({message: 'Parâmetros insuficientes para criar usuário!'})
+            if (!dados.nomeUsuario || !dados.senha || !dados.email || !dados.dataNascimento) {
+                return resposta.status(400).json({ mensagem: 'Parâmetros insuficientes para criar usuário!' })
             }
 
-            const emailRegex = /^[^\s@]+@grupoilla\.com\.br$/;
-            if (!emailRegex.test(data.email)) {
-                return res.status(400).json({ message: 'Apenas emails institucionais @grupoilla.com.br são permitidos!' });
+            const emailInstitucional = /^[^\s@]+@grupoilla\.com\.br$/;
+            if (!emailInstitucional.test(dados.email)) {
+                return resposta.status(400).json({ mensagem: 'Apenas emails institucionais @grupoilla.com.br são permitidos!' });
             }
 
-            const user = await createUser(data);
-            const { password: _, ...userData } = user;
-            res.status(200).json({message: 'Usuário criado!', user: userData})
-            
-        } catch (error) {
-            res.status(500).json({
-                message: 'Erro ao criar usuário!',
-                error: error.message
-            });
+            const usuario = await criarUsuario(dados);
+            const { senha: _, ...dadosUsuario } = usuario;
+            return resposta.status(201).json({ mensagem: 'Usuário criado!', usuario: dadosUsuario })
+
+        } catch (erro) {
+            const { status, mensagem } = respostaDeErro(erro, 'criar usuário');
+            return resposta.status(status).json({ mensagem, erro: erro.message });
         }
     }
 
-    async showController(req, res) {
+    async listarController(requisicao, resposta) {
         try {
-            const user = await showAllUsers();
-            res.json(user)    
-        } catch (error) {
-            res.status(500).json({
-                message: 'Controller: Erro ao acessar a tabela!',
-                error: error.message
+            const usuarios = await listarTodos();
+            return resposta.status(200).json(usuarios)
+        } catch (erro) {
+            return resposta.status(500).json({
+                mensagem: 'Controller: Erro ao acessar a tabela!',
+                erro: erro.message
             })
-            // console.error(error);
         }
     }
 
-    async updateController(req, res) {
+    async atualizarController(requisicao, resposta) {
         try {
-            const {id} = req.params;
-            const data = req.body;
-            const userId = parseInt(id, 10); //parseInt para garantir que é um número e não uma string
-            
-            if (isNaN(userId)) {
-                return res.status(400).json({message: 'ID inválido!'});
+            const { id } = requisicao.params;
+            const dados = requisicao.body;
+            const idUsuario = parseInt(id, 10);
+
+            if (isNaN(idUsuario)) {
+                return resposta.status(400).json({ mensagem: 'ID inválido!' });
             };
 
-            if (data.email) {
-                const emailRegex = /^[^\s@]+@grupoilla\.com\.br$/;
-                if (!emailRegex.test(data.email)) {
-                    return res.status(400).json({ message: 'Apenas emails institucionais @grupoilla.com.br são permitidos!' });
+            if (dados.email) {
+                const emailInstitucional = /^[^\s@]+@grupoilla\.com\.br$/;
+                if (!emailInstitucional.test(dados.email)) {
+                    return resposta.status(400).json({ mensagem: 'Apenas emails institucionais @grupoilla.com.br são permitidos!' });
                 }
             }
 
-            const user = await updateUser(userId, data); 
+            const usuario = await atualizarUsuario(idUsuario, dados);
 
-            res.status(200).json({message: 'Usuário atualizado!', user})
-        } catch (error) {
-            res.status(500).json({
-                message: 'Controller: Erro ao atualizar usuário!',
-                error: error.message
-            })
+            return resposta.status(200).json({ mensagem: 'Usuário atualizado!', usuario })
+        } catch (erro) {
+            const { status, mensagem } = respostaDeErro(erro, 'atualizar usuário');
+            return resposta.status(status).json({ mensagem, erro: erro.message });
         }
     }
 
-    async deleteController(req, res) {
+    async deletarController(requisicao, resposta) {
         try {
-            const {id} = req.params;
+            const { id } = requisicao.params;
             if (id === null || id === undefined) {
-                return res.status(400).json({message: 'Não foi possivel deletar o usuário! ID Obrigatório.'})
+                return resposta.status(400).json({ mensagem: 'Não foi possivel deletar o usuário! ID Obrigatório.' })
             };
-            const result = await deleteUser(parseInt(id));
-            res.status(200).json(result.message) //message é necessario para q o front entenda que deu certo
 
-        } catch (error) {
-            res.status(500).json({
-                message: 'Controller: Erro ao deletar usuário!',
-                error: error.message
-            })
+            const resultado = await deletarUsuario(parseInt(id, 10));
+            return resposta.status(200).json(resultado)
+
+        } catch (erro) {
+            const { status, mensagem } = respostaDeErro(erro, 'deletar usuário');
+            return resposta.status(status).json({ mensagem, erro: erro.message });
         }
     }
 }
 
-export default userController;
+export default UsuarioController;

@@ -8,55 +8,56 @@ import {
   useState,
 } from "react";
 
-type Theme = "light" | "dark";
+export type Tema = "light" | "dark";
 
-type ThemeContextValue = {
-  theme: Theme;
-  toggleTheme: () => void;
+type ValorContextoTema = {
+  tema: Tema;
+  alternarTema: () => void;
 };
 
-const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
+const ContextoTema = createContext<ValorContextoTema | undefined>(undefined);
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("dark");
+export function ProvedorTema({ children }: { children: React.ReactNode }) {
+  const [tema, setTema] = useState<Tema>("dark");
 
   useEffect(() => {
-    const stored = (typeof window !== "undefined" &&
-      window.localStorage.getItem("acervo-theme")) as Theme | null;
-    const initial: Theme =
-      stored ??
+    const guardado = (typeof window !== "undefined" &&
+      window.localStorage.getItem("acervo-tema")) as Tema | null;
+    const inicial: Tema =
+      guardado ??
       (window.matchMedia("(prefers-color-scheme: light)").matches
         ? "light"
         : "dark");
-    setTheme(initial);
+    setTema(inicial);
   }, []);
 
   useEffect(() => {
-    const root = document.documentElement;
-    root.classList.add("theme-transition");
-    root.classList.toggle("dark", theme === "dark");
-    root.classList.toggle("light", theme === "light");
-    window.localStorage.setItem("acervo-theme", theme);
-    const timeout = window.setTimeout(
-      () => root.classList.remove("theme-transition"),
+    const raiz = document.documentElement;
+    raiz.classList.add("theme-transition");
+    raiz.classList.toggle("dark", tema === "dark");
+    raiz.classList.toggle("light", tema === "light");
+    window.localStorage.setItem("acervo-tema", tema);
+    const temporizador = window.setTimeout(
+      () => raiz.classList.remove("theme-transition"),
       450,
     );
-    return () => window.clearTimeout(timeout);
-  }, [theme]);
+    return () => window.clearTimeout(temporizador);
+  }, [tema]);
 
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  const alternarTema = useCallback(() => {
+    setTema((anterior) => (anterior === "dark" ? "light" : "dark"));
   }, []);
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ContextoTema.Provider value={{ tema, alternarTema }}>
       {children}
-    </ThemeContext.Provider>
+    </ContextoTema.Provider>
   );
 }
 
-export function useTheme() {
-  const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error("useTheme must be used within ThemeProvider");
-  return ctx;
+export function useTema() {
+  const contexto = useContext(ContextoTema);
+  if (!contexto)
+    throw new Error("useTema precisa ser usado dentro de ProvedorTema");
+  return contexto;
 }
