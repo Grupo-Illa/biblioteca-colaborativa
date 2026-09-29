@@ -1,17 +1,20 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { BookOpen, Loader2, Plus, Pencil, Trash2, X, Search, Check, ChevronDown } from "lucide-react"
+import { BookOpen, Loader2, Plus, Pencil, Trash2, X, Search, Check, ChevronDown, Image as ImageIcon, Undo2 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type { Livro, LivroPayload } from "@/lib/api"
-import { getLivros, createBook, updateBook, deleteBook } from "@/lib/api"
+import { getLivros, createBook, updateBook, deleteBook, forceReturnBook } from "@/lib/api"
+import { useToast } from "@/components/ui/toast"
 
 type AdminBookModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Avisa a home para recarregar o acervo após devolução forçada. */
+  onChanged?: () => void
 }
 
 type FormMode = "create" | "edit"
@@ -21,10 +24,12 @@ const emptyForm: LivroPayload = {
   autor: "",
   dataLancamento: "",
   editora: "",
+  categoria: "",
+  capa: "",
   statusAluguel: "DISPONIVEL",
 }
 
-export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
+export function AdminBookModal({ open, onOpenChange, onChanged }: AdminBookModalProps) {
   const [livros, setLivros] = useState<Livro[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -34,6 +39,8 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
+  const [forcandoId, setForcandoId] = useState<number | null>(null)
+  const { toast } = useToast()
 
   const fetchLivros = useCallback(async () => {
     setLoading(true)
@@ -55,11 +62,10 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
     }
   }, [open, fetchLivros])
 
-  const filtered = livros.filter(
-    (l) =>
-      l.titulo.toLowerCase().includes(search.toLowerCase()) ||
-      l.autor.toLowerCase().includes(search.toLowerCase()) ||
-      l.editora.toLowerCase().includes(search.toLowerCase()),
+  const filtered = livros.filter((l) =>
+    [l.titulo, l.autor, l.categoria, l.editora].some((campo) =>
+      campo?.toLowerCase().includes(search.toLowerCase()),
+    ),
   )
 
   function openCreateForm() {
@@ -78,21 +84,61 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
       autor: livro.autor,
       dataLancamento: livro.dataLancamento.split("T")[0],
       editora: livro.editora,
+      categoria: livro.categoria ?? "",
+      capa: livro.capa ?? "",
       statusAluguel: livro.statusAluguel,
     })
     setFormOpen(true)
     setError("")
   }
 
+  // Validação espelha a do backend: a capa vai parar no src de um <img>,
+  // então só aceitamos http(s). Erros aparecem antes de gastar uma request.
+  function validateForm(): string | null {
+    if (!formData.titulo?.trim()) return "Informe o título do livro."
+    if (!formData.autor?.trim()) return "Informe o autor."
+    if (!formData.dataLancamento) return "Informe a data de lançamento."
+    if (!formData.editora?.trim()) return "Informe a editora."
+    if (!formData.categoria?.trim()) return "Informe a categoria."
+
+    const capa = formData.capa?.trim()
+    if (capa) {
+      let url: URL
+      try {
+        url = new URL(capa)
+      } catch {
+        return "A URL da capa é inválida."
+      }
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        return "A capa deve ser uma URL começando com http:// ou https://"
+      }
+    }
+    return null
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setSubmitting(true)
     setError("")
+
+    const invalid = validateForm()
+    if (invalid) {
+      setError(invalid)
+      return
+    }
+
+    setSubmitting(true)
+
+    // Categoria vazia e capa vazia não devem ser enviadas como "".
+    const payload: LivroPayload = {
+      ...formData,
+      categoria: formData.categoria?.trim(),
+      capa: formData.capa?.trim() || undefined,
+    }
 
     const result =
       formMode === "create"
-        ? await createBook(formData)
-        : await updateBook(editingId!, formData)
+        ? await createBook(payload)
+        : await updateBook(editingId!, payload)
 
     setSubmitting(false)
 
@@ -112,7 +158,29 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
       setError(result.error)
     } else {
       fetchLivros()
+      onChanged?.()
     }
+  }
+
+  /**
+   * Devolução forçada: o ADMIN libera um livro que está com outra pessoa.
+   * O endpoint é separado do /devolver justamente para deixar claro na
+   * auditoria que foi uma ação administrativa, não uma devolução normal.
+   */
+  async function handleForceReturn(livro: Livro) {
+    if (!confirm(`Forçar a devolução de "${livro.titulo}"? O título voltará a ficar disponível.`)) return
+    setError("")
+
+    const result = await forceReturnBook(livro.id)
+    setForcandoId(null)
+    if (result.error) {
+      setError(result.message)
+      return
+    }
+
+    toast(`"${livro.titulo}" marcado como disponível.`, "sucesso")
+    await fetchLivros()
+    onChanged?.()
   }
 
   return (
@@ -165,28 +233,77 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/50 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    <th className="px-4 py-3">Capa</th>
                     <th className="px-4 py-3">ID</th>
                     <th className="px-4 py-3">Título</th>
                     <th className="px-4 py-3">Autor</th>
+                    <th className="px-4 py-3">Categoria</th>
                     <th className="px-4 py-3">Editora</th>
                     <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Alugado por</th>
                     <th className="px-4 py-3 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((livro) => (
                     <tr key={livro.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-3">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={livro.capa?.trim() || "/placeholder.svg"}
+                          alt=""
+                          className="h-12 w-8 rounded object-cover border border-border"
+                          onError={(e) => {
+                            e.currentTarget.src = "/placeholder.svg"
+                          }}
+                        />
+                      </td>
                       <td className="px-4 py-3 text-muted-foreground">{livro.id}</td>
                       <td className="px-4 py-3 font-medium">{livro.titulo}</td>
                       <td className="px-4 py-3 text-muted-foreground">{livro.autor}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{livro.categoria}</td>
                       <td className="px-4 py-3 text-muted-foreground">{livro.editora}</td>
                       <td className="px-4 py-3">
-                        <Badge variant={livro.statusAluguel === "DISPONIVEL" ? "default" : "secondary"}>
+                        <Badge
+                          variant={
+                            livro.statusAluguel === "DISPONIVEL" ? "success" : "warning"
+                          }
+                        >
                           {livro.statusAluguel === "DISPONIVEL" ? "Disponível" : "Alugado"}
                         </Badge>
                       </td>
+                      <td className="px-4 py-3">
+                        {livro.alugadoPor ? (
+                          <span
+                            className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                            title={livro.alugadoEm ?? undefined}
+                          >
+                            <span className="max-w-32 truncate">{livro.alugadoPor}</span>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/60">—</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <div className="inline-flex items-center gap-1">
+                          {livro.statusAluguel === "ALUGADO" && (
+                            <button
+                              type="button"
+                              disabled={forcandoId === livro.id}
+                              onClick={() => {
+                                setForcandoId(livro.id)
+                                handleForceReturn(livro)
+                              }}
+                              className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+                              title="Forçar devolução"
+                            >
+                              {forcandoId === livro.id ? (
+                                <Loader2 className="size-4 animate-spin" />
+                              ) : (
+                                <Undo2 className="size-4" />
+                              )}
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => openEditForm(livro)}
@@ -257,11 +374,18 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
                   className="h-10 w-full rounded-xl border border-border bg-secondary/60 px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-gold/50 focus:ring-2 focus:ring-gold/20"
                 />
               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                <label
+                  htmlFor="livro-editora"
+                  className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+                >
                   Editora
                 </label>
                 <input
+                  id="livro-editora"
                   type="text"
                   required
                   value={formData.editora}
@@ -270,6 +394,55 @@ export function AdminBookModal({ open, onOpenChange }: AdminBookModalProps) {
                   className="h-10 w-full rounded-xl border border-border bg-secondary/60 px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-gold/50 focus:ring-2 focus:ring-gold/20"
                 />
               </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="livro-categoria"
+                  className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+                >
+                  Categoria
+                </label>
+                <input
+                  id="livro-categoria"
+                  type="text"
+                  required
+                  value={formData.categoria}
+                  onChange={(e) => setFormData((p) => ({ ...p, categoria: e.target.value }))}
+                  placeholder="Tecnologia, Ficção, Biografia..."
+                  className="h-10 w-full rounded-xl border border-border bg-secondary/60 px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-gold/50 focus:ring-2 focus:ring-gold/20"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="livro-capa"
+                className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+              >
+                Imagem da capa <span className="font-normal lowercase text-muted-foreground/60">(URL, opcional)</span>
+              </label>
+              <div className="relative">
+                <ImageIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  id="livro-capa"
+                  type="url"
+                  inputMode="url"
+                  value={formData.capa}
+                  onChange={(e) => setFormData((p) => ({ ...p, capa: e.target.value }))}
+                  placeholder="https://exemplo.com/capa.jpg"
+                  className="h-10 w-full rounded-xl border border-border bg-secondary/60 pl-9 pr-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-gold/50 focus:ring-2 focus:ring-gold/20"
+                />
+              </div>
+              {formData.capa?.trim() && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={formData.capa.trim()}
+                  alt="Pré-visualização da capa"
+                  className="mt-2 h-24 w-16 rounded-lg border border-border object-cover"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none"
+                  }}
+                />
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">

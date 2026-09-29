@@ -1,12 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { BookOpen, Heart, Search, LogIn, User, Library } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
+import { BookOpen, Heart, Search, LogIn, LogOut, User, Library, BookMarked, Bookmark } from "lucide-react"
 import { ThemeToggle } from "@/components/library/theme-toggle"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { getMe, logoutUser, getMyRentals, getMyReservations } from "@/lib/api"
 import type { User as UserType } from "@/lib/api"
 import { AdminBookModal } from "@/components/library/admin-book-modal"
+import { MyRentalsDialog } from "@/components/library/my-rentals-dialog"
 
 type HeaderProps = {
   query: string
@@ -14,6 +16,15 @@ type HeaderProps = {
   favoritesCount: number
   showFavoritesOnly: boolean
   onToggleFavorites: () => void
+  onLogout: () => void
+  /** Chamado depois de uma devolução, para a home recarregar o acervo. */
+  onRentalChanged: () => void
+  /**
+   * Contador que a home incrementa a cada mudança no acervo. Os contadores
+   * do atalho dependem dele porque `onRentalChanged` é uma referência estável
+   * e nunca mudaria de identidade para disparar um efeito.
+   */
+  acervoRev: number
 }
 
 export function Header({
@@ -22,22 +33,59 @@ export function Header({
   favoritesCount,
   showFavoritesOnly,
   onToggleFavorites,
+  onLogout,
+  onRentalChanged,
+  acervoRev,
 }: HeaderProps) {
   const [currentUser, setCurrentUser] = useState<UserType | null>(null)
   const [adminModalOpen, setAdminModalOpen] = useState(false)
+  const [rentalsOpen, setRentalsOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  // Contadores da "minha biblioteca", exibidos no atalho ao lado de Favoritos.
+  const [alugados, setAlugados] = useState(0)
+  const [reservados, setReservados] = useState(0)
 
-  useEffect(() => {
-    const stored = localStorage.getItem("acervo-user")
-    if (stored) {
-      try {
-        setCurrentUser(JSON.parse(stored))
-      } catch {}
-    }
+  const carregarContadores = useCallback(async () => {
+    const [meus, reservas] = await Promise.all([getMyRentals(), getMyReservations()])
+    setAlugados(meus.length)
+    setReservados(reservas.length)
   }, [])
 
-  const handleLogout = () => {
-    localStorage.removeItem("acervo-user")
+  useEffect(() => {
+    // O `role` vem do servidor, que lê o cookie httpOnly. O botão de admin
+    // abaixo é só conveniência de UI — quem barra de verdade é o
+    // requireAdmin no backend.
+    getMe().then((me) => {
+      setCurrentUser(me)
+      if (me) carregarContadores()
+    })
+  }, [carregarContadores])
+
+  // Sempre que a home sinaliza mudança no acervo, os contadores acompanham.
+  useEffect(() => {
+    if (currentUser) void carregarContadores()
+  }, [acervoRev, currentUser, carregarContadores])
+
+  useEffect(() => {
+    // O `role` vem do servidor, que lê o cookie httpOnly. O botão de admin
+    // abaixo é só conveniência de UI — quem barra de verdade é o
+    // requireAdmin no backend.
+    getMe().then(setCurrentUser)
+  }, [])
+
+  const handleLogout = async () => {
+    await logoutUser()
     setCurrentUser(null)
+    setAlugados(0)
+    setReservados(0)
+    onLogout()
+  }
+
+  /** Abre a minha biblioteca pelo atalho do header. */
+  function abrirBiblioteca() {
+    setRentalsOpen(true)
+    // Recarrega os contadores ao abrir, para refletir o estado atual.
+    void carregarContadores()
   }
 
   return (
@@ -87,34 +135,101 @@ export function Header({
             )}
           </button>
 
+          {currentUser && (
+            <button
+              type="button"
+              onClick={abrirBiblioteca}
+              aria-label={`Minha biblioteca: ${alugados} alugado(s), ${reservados} reserva(s)`}
+              className={cn(
+                "relative inline-flex h-10 items-center gap-2 rounded-full border px-3 text-sm font-medium transition-all",
+                alugados > 0
+                  ? "border-gold/60 bg-gold/10 text-foreground"
+                  : "border-border bg-secondary/60 text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <BookMarked className="size-4" />
+              <span className="hidden sm:inline">Meus livros</span>
+              {alugados > 0 && (
+                <span className="flex min-w-5 items-center justify-center rounded-full bg-gold px-1.5 text-[11px] font-semibold text-gold-foreground">
+                  {alugados}
+                </span>
+              )}
+              {reservados > 0 && (
+                <span
+                  className="flex min-w-5 items-center justify-center rounded-full border border-border bg-background px-1.5 text-[11px] font-semibold text-muted-foreground"
+                  title={`${reservados} na fila`}
+                >
+                  <Bookmark className="size-2.5" />
+                  {reservados}
+                </span>
+              )}
+            </button>
+          )}
+
           {currentUser ? (
-            <div className="group relative">
+            <div className="relative">
               <button
                 type="button"
+                onClick={() => setUserMenuOpen((v) => !v)}
+                aria-expanded={userMenuOpen}
+                aria-haspopup="menu"
                 className="inline-flex h-10 items-center gap-2 rounded-full border border-border bg-secondary/60 px-3 text-sm font-medium text-muted-foreground transition-all hover:text-foreground"
               >
                 <User className="size-4" />
                 <span className="hidden sm:inline max-w-24 truncate">{currentUser.username}</span>
               </button>
-              <div className="absolute right-0 top-full mt-2 w-48 origin-top-right scale-95 rounded-xl border border-border bg-popover p-1 opacity-0 shadow-lg transition-all group-hover:scale-100 group-hover:opacity-100">
-                {currentUser.role === "ADMIN" && (
+              {userMenuOpen && (
+                <>
+                  {/* Fecha ao clicar fora */}
                   <button
                     type="button"
-                    onClick={() => setAdminModalOpen(true)}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    aria-hidden="true"
+                    tabIndex={-1}
+                    onClick={() => setUserMenuOpen(false)}
+                    className="fixed inset-0 z-10 cursor-default"
+                  />
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-full z-20 mt-2 w-48 origin-top-right rounded-xl border border-border bg-popover p-1 shadow-lg"
                   >
-                    <Library className="size-4" />
-                    Gerenciar acervo
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                >
-                  Sair
-                </button>
-              </div>
+                    {currentUser.role === "ADMIN" && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setAdminModalOpen(true)
+                          setUserMenuOpen(false)
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                      >
+                        <Library className="size-4" />
+                        Gerenciar acervo
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setRentalsOpen(true)
+                        setUserMenuOpen(false)
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    >
+                      <BookMarked className="size-4" />
+                      Meus empréstimos
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={handleLogout}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    >
+                      <LogOut className="size-4" />
+                      Sair
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <a
@@ -130,7 +245,16 @@ export function Header({
         </div>
       </header>
 
-      <AdminBookModal open={adminModalOpen} onOpenChange={setAdminModalOpen} />
+      <AdminBookModal
+        open={adminModalOpen}
+        onOpenChange={setAdminModalOpen}
+        onChanged={onRentalChanged}
+      />
+      <MyRentalsDialog
+        open={rentalsOpen}
+        onOpenChange={setRentalsOpen}
+        onReturned={onRentalChanged}
+      />
     </>
   )
 }
